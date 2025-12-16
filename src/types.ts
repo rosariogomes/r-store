@@ -6,7 +6,7 @@ export interface Client {
   credit_limit: number;
   current_debt: number;
   image_url?: string;
-  birthDate?: string; // Formato YYYY-MM-DD
+  birthDate?: string;
 }
 
 export interface Product {
