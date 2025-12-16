@@ -14,6 +14,8 @@ export interface Product {
   name: string;
   cost_price: number;
   sale_price: number;
+  category: string; // Nova coluna
+  gender: 'MALE' | 'FEMALE' | 'UNISEX'; // Nova coluna
   size: string;
   color: string;
   stock_quantity: number;
