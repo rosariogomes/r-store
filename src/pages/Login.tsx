@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../context/StoreContext';
-import { ICONS } from '../../constants';
+import { ICONS } from '../constants';
 
 export const Login = () => {
   const navigate = useNavigate();

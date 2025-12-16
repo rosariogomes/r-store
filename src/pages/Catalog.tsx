@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { ICONS } from '../../constants';
+import { ICONS } from '../constants';
 import { useStore } from '../context/StoreContext';
 
 export const Catalog = () => {

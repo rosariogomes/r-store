@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useNavigate } from 'react-router-dom';
-import { ICONS } from '../../constants';
+import { ICONS } from '../constants';
 import { useStore } from '../context/StoreContext';
 
 // --- Data Helpers ---

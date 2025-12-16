@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Client, Product, Sale, SaleStatus, StoreConfig, Expense, CashRegisterSession, CashRegisterMovement } from '../types';
-import { supabase } from '../lib/supabase'; // Importando a conexão real
+import { supabase } from '../lib/supabase'; 
 
 interface StoreContextData {
   clients: Client[];
@@ -37,8 +37,6 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
   const [products, setProducts] = useState<Product[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
-  
-  // Caixa simplificado para a versão Web (Local Session para o dia)
   const [cashSession, setCashSession] = useState<CashRegisterSession | null>(null);
 
   const [storeConfig, setStoreConfig] = useState<StoreConfig>({
@@ -51,17 +49,12 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
     logo_url: ''
   });
 
-  // --- CARREGAMENTO INICIAL (DATA FETCHING) ---
   useEffect(() => {
-    // 1. Auth Local
     const storedAuth = localStorage.getItem('rstore_auth');
     if (storedAuth === 'true') setIsAuthenticated(true);
-
-    // 2. Config Local
     const storedConfig = localStorage.getItem('rstore_config');
     if (storedConfig) setStoreConfig(JSON.parse(storedConfig));
-
-    // 3. Buscar Dados do Supabase
+    
     fetchData();
   }, []);
 
@@ -94,14 +87,11 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
     localStorage.setItem('rstore_config', JSON.stringify(config));
   };
 
-  // --- ACTIONS (CRUD Supabase) ---
-
   const addClient = async (client: Client) => {
-    // Remove o ID gerado pelo Date.now() para deixar o Supabase gerar o UUID ou usa ele se for compatível
     const { id, ...clientData } = client; 
     const { data, error } = await supabase.from('clients').insert([clientData]).select();
     if (data) setClients(prev => [data[0], ...prev]);
-    if (error) console.error(error);
+    if (error) console.error("Erro ao adicionar cliente:", error);
   };
 
   const updateClient = async (updatedClient: Client) => {
@@ -116,7 +106,7 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
 
   const addProduct = async (product: Product) => {
     const { id, ...prodData } = product;
-    const { data, error } = await supabase.from('products').insert([prodData]).select();
+    const { data } = await supabase.from('products').insert([prodData]).select();
     if (data) setProducts(prev => [data[0], ...prev]);
   };
 
@@ -130,38 +120,22 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
     setProducts(prev => prev.filter(p => p.id !== id));
   };
 
-  const addExpense = async (expense: Expense) => {
-    const { id, ...expData } = expense;
-    const { data } = await supabase.from('expenses').insert([expData]).select();
-    if (data) setExpenses(prev => [data[0], ...prev]);
-  };
-
-  const deleteExpense = async (id: string) => {
-    await supabase.from('expenses').delete().eq('id', id);
-    setExpenses(prev => prev.filter(e => e.id !== id));
-  };
-
-  // --- LÓGICA DE VENDAS COMPLEXA ---
-
   const addSale = async (newSale: Sale, items: any[]) => {
-    // 1. Salvar a Venda
-    const { id: fakeId, ...saleData } = newSale; // Remove ID temporário
+    const { id: fakeId, ...saleData } = newSale;
     const { data: saleRes, error } = await supabase.from('sales').insert([{
         ...saleData,
-        items: items // Salvamos os itens como JSONB na tabela de vendas para simplificar
+        items: items 
     }]).select();
 
     if (error) {
-        alert("Erro ao salvar venda");
         console.error(error);
+        alert("Erro ao salvar venda");
         return;
     }
     
     const savedSale = saleRes[0];
     setSales(prev => [savedSale, ...prev]);
 
-    // 2. Atualizar Estoque (Iterar sobre os itens)
-    // Nota: Em produção real, faríamos isso com uma Procedure SQL (RPC) para garantir integridade
     items.forEach(async (item) => {
         const prod = products.find(p => p.id === item.id);
         if (prod) {
@@ -171,15 +145,11 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
             } else {
                 updates = { on_bag_quantity: prod.on_bag_quantity + item.cartQuantity };
             }
-            
             await supabase.from('products').update(updates).eq('id', prod.id);
-            
-            // Atualizar Localmente
             setProducts(prev => prev.map(p => p.id === prod.id ? { ...p, ...updates } : p));
         }
     });
 
-    // 3. Atualizar Dívida do Cliente
     const debtToAdd = newSale.total_amount - newSale.paid_amount;
     if (debtToAdd > 0) {
         const client = clients.find(c => c.id === newSale.client_id);
@@ -189,15 +159,13 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
             setClients(prev => prev.map(c => c.id === client.id ? { ...c, current_debt: newDebt } : c));
         }
     }
-
-    // 4. Integração Caixa (Opcional: Salvar no banco ou manter local)
+    
     if (newSale.paid_amount > 0 && cashSession?.status === 'OPEN') {
         addCashMovement('SALE', newSale.paid_amount, `Venda - ${newSale.client_name}`);
     }
   };
 
   const updateSaleStatus = async (saleId: string, amountPaidNow: number, newStatus: SaleStatus) => {
-    // Atualizar Venda
     const sale = sales.find(s => s.id === saleId);
     if (!sale) return;
     
@@ -210,7 +178,6 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
     
     setSales(prev => prev.map(s => s.id === saleId ? { ...s, paid_amount: newPaidAmount, status: newStatus } : s));
 
-    // Abater Dívida Cliente
     const client = clients.find(c => c.id === sale.client_id);
     if (client) {
         const newDebt = Math.max(0, (client.current_debt || 0) - amountPaidNow);
@@ -218,7 +185,6 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
         setClients(prev => prev.map(c => c.id === client.id ? { ...c, current_debt: newDebt } : c));
     }
 
-    // Caixa
     if (amountPaidNow > 0 && cashSession?.status === 'OPEN') {
         addCashMovement('RECEIPT', amountPaidNow, `Recebimento Dívida - ${sale.client_name}`);
     }
@@ -228,7 +194,6 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
     const sale = sales.find(s => s.id === saleId);
     if (!sale) return;
 
-    // Calcular novos totais
     let newTotalAmount = 0;
     const newItemsList = sale.items.map(item => {
         const keptQty = keptItems[item.product_id] || 0;
@@ -236,28 +201,27 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
         return { ...item, quantity: keptQty };
     }).filter(i => i.quantity > 0);
 
-    const debtReduction = sale.total_amount - newTotalAmount;
-
-    // Atualizar Venda no Banco
     await supabase.from('sales').update({
         total_amount: newTotalAmount,
-        items: newItemsList, // JSONB atualizado
+        items: newItemsList, 
         status: newTotalAmount === 0 ? 'PAID' : 'PENDING',
         type: 'SALE'
     }).eq('id', saleId);
-
-    // Atualizar Estoque (Reverter malinha e baixar estoque real do que ficou)
-    // Nota: Essa lógica é complexa para fazer 100% via API direta, mas vamos simplificar:
-    // O front atualiza o estado local e dispara updates individuais.
     
-    setSales(prev => prev.map(s => s.id === saleId ? { ...s, total_amount: newTotalAmount, items: newItemsList, status: newTotalAmount === 0 ? 'PAID' : 'PENDING', type: 'SALE' } : s));
-    
-    // Atualiza produtos e cliente localmente para feedback rápido
-    // (Em produção ideal, você faria refetch ou RPC)
-    fetchData(); // Recarrega tudo para garantir consistência dos estoques e dívidas
+    fetchData(); 
   };
 
-  // --- CAIXA (Mantido Local/Híbrido por simplicidade nesta versão) ---
+  const addExpense = async (expense: Expense) => {
+    const { id, ...expData } = expense;
+    const { data } = await supabase.from('expenses').insert([expData]).select();
+    if (data) setExpenses(prev => [data[0], ...prev]);
+  };
+
+  const deleteExpense = async (id: string) => {
+    await supabase.from('expenses').delete().eq('id', id);
+    setExpenses(prev => prev.filter(e => e.id !== id));
+  };
+
   const openCashRegister = (initialAmount: number) => {
     const newSession: CashRegisterSession = {
         id: Date.now().toString(),
@@ -280,7 +244,6 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
   const closeCashRegister = () => {
     if (cashSession) {
         setCashSession({ ...cashSession, status: 'CLOSED', closed_at: new Date().toISOString() });
-        // Aqui você poderia salvar o fechamento na tabela 'cash_movements' ou criar uma tabela 'sessions'
     }
   };
 
@@ -305,7 +268,6 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
         };
     });
     
-    // Salvar auditoria no banco
     await supabase.from('cash_movements').insert([{
         type, amount, description, method, timestamp: new Date().toISOString()
     }]);

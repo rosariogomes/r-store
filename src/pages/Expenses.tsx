@@ -1,15 +1,15 @@
 import React, { useState, useMemo } from 'react';
-import { ICONS } from '../../constants';
+import { ICONS } from '../constants';
 import { Expense } from '../types';
 import { useStore } from '../context/StoreContext';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 
 const CATEGORY_COLORS = {
-  FIXED: '#3b82f6', // blue
-  VARIABLE: '#eab308', // yellow
-  MARKETING: '#a855f7', // purple
-  PERSONNEL: '#f97316', // orange
-  TAXES: '#ef4444', // red
+  FIXED: '#3b82f6', 
+  VARIABLE: '#eab308', 
+  MARKETING: '#a855f7', 
+  PERSONNEL: '#f97316', 
+  TAXES: '#ef4444', 
 };
 
 const CATEGORY_LABELS = {
@@ -24,13 +24,11 @@ export const Expenses = () => {
   const { expenses, addExpense, deleteExpense } = useStore();
   const [isModalOpen, setIsModalOpen] = useState(false);
   
-  // Form State
   const [desc, setDesc] = useState('');
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState<Expense['category']>('FIXED');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
 
-  // Calculations
   const totalExpenses = expenses.reduce((acc, e) => acc + e.amount, 0);
   
   const chartData = useMemo(() => {
@@ -73,7 +71,6 @@ export const Expenses = () => {
 
   return (
     <div className="animate-fade-in pb-20">
-      {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
         <div>
           <h1 className="text-3xl font-bold text-white mb-2">Gestão de Despesas</h1>
@@ -88,7 +85,6 @@ export const Expenses = () => {
         </button>
       </div>
 
-      {/* Overview Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
          <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl relative overflow-hidden">
              <div className="absolute -right-4 -top-4 text-red-900/20"><ICONS.Expense size={120} /></div>
@@ -123,7 +119,6 @@ export const Expenses = () => {
          </div>
       </div>
 
-      {/* Expenses List */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
             <table className="w-full text-left">
@@ -173,7 +168,6 @@ export const Expenses = () => {
         </div>
       </div>
 
-      {/* Add Modal */}
       {isModalOpen && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
               <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-md shadow-2xl relative">
@@ -192,7 +186,6 @@ export const Expenses = () => {
                             required
                           />
                       </div>
-                      
                       <div className="grid grid-cols-2 gap-4">
                           <div>
                             <label className="text-xs font-semibold text-zinc-500 uppercase mb-2 block">Valor (R$)</label>
@@ -216,7 +209,6 @@ export const Expenses = () => {
                             />
                           </div>
                       </div>
-
                       <div>
                           <label className="text-xs font-semibold text-zinc-500 uppercase mb-2 block">Categoria</label>
                           <div className="grid grid-cols-2 gap-2">
@@ -236,7 +228,6 @@ export const Expenses = () => {
                               ))}
                           </div>
                       </div>
-
                       <div className="flex gap-3 pt-4">
                           <button 
                             type="button"

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ICONS } from '../../constants';
+import { ICONS } from '../constants';
 import { Client } from '../types';
 import { useStore } from '../context/StoreContext';
 

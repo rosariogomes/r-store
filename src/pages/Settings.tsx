@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ICONS } from '../../constants';
+import { ICONS } from '../constants';
 import { useStore } from '../context/StoreContext';
 
 export const Settings = () => {
