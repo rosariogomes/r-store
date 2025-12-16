@@ -55,6 +55,7 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
     const storedConfig = localStorage.getItem('rstore_config');
     if (storedConfig) setStoreConfig(JSON.parse(storedConfig));
     
+    // Carregar dados iniciais
     fetchData();
   }, []);
 
@@ -120,22 +121,37 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
     setProducts(prev => prev.filter(p => p.id !== id));
   };
 
+  // --- CORREÇÃO AQUI NA FUNÇÃO ADD SALE ---
   const addSale = async (newSale: Sale, items: any[]) => {
-    const { id: fakeId, ...saleData } = newSale;
-    const { data: saleRes, error } = await supabase.from('sales').insert([{
-        ...saleData,
-        items: items 
-    }]).select();
+    // 1. Separamos o ID falso e o paymentMethod (que está em camelCase)
+    const { id: fakeId, paymentMethod, ...restOfSale } = newSale;
+    
+    // 2. Criamos o objeto pronto para o Banco (traduzindo para snake_case)
+    const salePayload = {
+        ...restOfSale,
+        items: items,
+        payment_method: paymentMethod // <--- AQUI ESTAVA O ERRO (Mapeamos camelCase para snake_case)
+    };
+
+    const { data: saleRes, error } = await supabase.from('sales').insert([salePayload]).select();
 
     if (error) {
-        console.error(error);
-        alert("Erro ao salvar venda");
+        console.error("Erro Supabase:", error); // Log detalhado no console
+        alert(`Erro ao salvar venda: ${error.message}`);
         return;
     }
     
+    // Atualiza estado local
     const savedSale = saleRes[0];
-    setSales(prev => [savedSale, ...prev]);
+    // Convertemos de volta para o formato do Frontend para não quebrar a tela atual
+    const savedSaleFrontend: Sale = {
+        ...savedSale,
+        paymentMethod: savedSale.payment_method
+    };
+    
+    setSales(prev => [savedSaleFrontend, ...prev]);
 
+    // Atualiza estoque dos produtos
     items.forEach(async (item) => {
         const prod = products.find(p => p.id === item.id);
         if (prod) {
@@ -150,6 +166,7 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
         }
     });
 
+    // Atualiza dívida do cliente se houver pendência
     const debtToAdd = newSale.total_amount - newSale.paid_amount;
     if (debtToAdd > 0) {
         const client = clients.find(c => c.id === newSale.client_id);
@@ -160,6 +177,7 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
         }
     }
     
+    // Lança no caixa se houve pagamento
     if (newSale.paid_amount > 0 && cashSession?.status === 'OPEN') {
         addCashMovement('SALE', newSale.paid_amount, `Venda - ${newSale.client_name}`);
     }
