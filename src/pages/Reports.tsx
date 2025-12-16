@@ -1,10 +1,11 @@
 import React, { useMemo } from 'react';
 import { 
   AreaChart, Area, PieChart, Pie, Cell, 
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar 
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, BarChart, Bar 
 } from 'recharts';
 import { ICONS } from '../constants';
 import { useStore } from '../context/StoreContext';
+import { SaleItem } from '../types'; // <--- CORREÇÃO 1: Import do tipo
 
 const PAYMENT_DATA_MOCK = [
   { name: 'Pix', value: 45, color: '#10b981' }, 
@@ -16,35 +17,53 @@ const PAYMENT_DATA_MOCK = [
 export const Reports = () => {
   const { sales, expenses, products, clients } = useStore();
 
+  // --- Calculations for DRE (Demonstração do Resultado do Exercício) ---
   const dre = useMemo(() => {
+    // 1. Receita Bruta (Vendas Pagas)
     const grossRevenue = sales
         .filter(s => s.status === 'PAID')
         .reduce((acc, s) => acc + s.paid_amount, 0);
 
+    // 2. CMV (Custo da Mercadoria Vendida) - Estimated
+    // We iterate over sold items in Paid sales
     let cmv = 0;
     sales.filter(s => s.status === 'PAID').forEach(sale => {
-        sale.items.forEach(item => {
-            const product = products.find(p => p.id === item.product_id);
-            if (product) {
-                cmv += product.cost_price * item.quantity;
-            }
-        });
+        if (sale.items) {
+            // <--- CORREÇÃO 2: Tipagem explícita para evitar o erro "implicitly has an 'any' type"
+            sale.items.forEach((item: SaleItem) => {
+                // Find current cost price of product
+                const product = products.find(p => p.id === item.product_id);
+                if (product) {
+                    cmv += product.cost_price * item.quantity;
+                }
+            });
+        }
     });
 
     const grossProfit = grossRevenue - cmv;
+
+    // 3. Despesas Operacionais
     const operationalExpenses = expenses.reduce((acc, e) => acc + e.amount, 0);
+
+    // 4. Lucro Líquido
     const netProfit = grossProfit - operationalExpenses;
+
+    // Margin
     const margin = grossRevenue > 0 ? (netProfit / grossRevenue) * 100 : 0;
 
     return { grossRevenue, cmv, grossProfit, operationalExpenses, netProfit, margin };
   }, [sales, expenses, products]);
 
+  // --- Top Products Calculation ---
   const topProducts = useMemo(() => {
       const counts: {[key: string]: number} = {};
       sales.filter(s => s.status === 'PAID').forEach(s => {
-          s.items.forEach(i => {
-              counts[i.product_id] = (counts[i.product_id] || 0) + i.quantity;
-          });
+          if (s.items) {
+              // <--- CORREÇÃO 3: Prevenção do mesmo erro aqui embaixo
+              s.items.forEach((i: SaleItem) => {
+                  counts[i.product_id] = (counts[i.product_id] || 0) + i.quantity;
+              });
+          }
       });
       return Object.entries(counts)
         .map(([id, qty]) => {
@@ -58,6 +77,7 @@ export const Reports = () => {
 
   return (
     <div className="animate-fade-in pb-20">
+      {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
         <div>
           <h1 className="text-3xl font-bold text-white mb-2">Relatórios Gerenciais</h1>
@@ -69,6 +89,7 @@ export const Reports = () => {
         </div>
       </div>
 
+      {/* DRE Cards (Simplified P&L) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <div className="bg-zinc-900 border border-zinc-800 p-5 rounded-2xl">
               <p className="text-zinc-500 text-xs uppercase font-bold mb-1">Faturamento Bruto</p>
@@ -103,7 +124,10 @@ export const Reports = () => {
           </div>
       </div>
 
+      {/* Main Charts Area */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        
+        {/* Waterfall / Composition Chart */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
             <h3 className="text-white font-bold mb-6 flex items-center gap-2">
                 <ICONS.Trending size={20} className="text-brand-500" /> Composição do Resultado
@@ -133,6 +157,7 @@ export const Reports = () => {
             </div>
         </div>
 
+        {/* Payment Methods (Still Mocked for simplicity or can be calculated) */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
             <h3 className="text-white font-bold mb-6 flex items-center gap-2">
                 <ICONS.Money size={20} className="text-green-500" /> Métodos de Pagamento
@@ -172,6 +197,8 @@ export const Reports = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+         
+         {/* Top Products Real Data */}
          <div className="lg:col-span-2 bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
             <h3 className="text-white font-bold mb-6">Produtos Mais Vendidos</h3>
             <div className="space-y-4">
@@ -196,6 +223,7 @@ export const Reports = () => {
             </div>
          </div>
 
+         {/* Top Clients - Can be updated to real logic if desired, kept mock for UI stability */}
          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
             <h3 className="text-white font-bold mb-6">Top Clientes (Mock)</h3>
             <div className="space-y-4">

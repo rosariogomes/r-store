@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ICONS } from '../constants';
 import { useStore } from '../context/StoreContext';
+import { CashRegisterMovement } from '../types'; // <--- CORREÇÃO 1: Importei o tipo
 
 export const CashRegister = () => {
   const { cashSession, openCashRegister, closeCashRegister, addCashMovement } = useStore();
@@ -11,16 +12,21 @@ export const CashRegister = () => {
   const [closingCount, setClosingCount] = useState({ cash: '', card: '', pix: '' });
 
   const isOpen = cashSession?.status === 'OPEN';
-  const movements = cashSession?.movements || [];
+  
+  // <--- CORREÇÃO 2: Tipagem explícita para o TypeScript não se perder
+  const movements: CashRegisterMovement[] = cashSession?.movements || [];
 
+  // Calculations
   const totalIn = movements.filter(m => m.amount > 0 && m.type !== 'OPENING').reduce((acc, m) => acc + m.amount, 0);
   const totalOut = movements.filter(m => m.amount < 0).reduce((acc, m) => acc + Math.abs(m.amount), 0);
   const currentTotal = cashSession?.current_balance || 0;
 
+  // Handlers
   const handleMovement = (type: 'SUPPLY' | 'BLEED') => {
     const amount = parseFloat(formAmount);
     if (!amount || amount <= 0) return;
 
+    // Use Context Action
     addCashMovement(
         type, 
         type === 'BLEED' ? -amount : amount, 
@@ -85,8 +91,10 @@ export const CashRegister = () => {
         </div>
       </div>
 
+      {/* Main Grid */}
       {isOpen && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Left: Stats */}
             <div className="space-y-6">
                 <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl relative overflow-hidden">
                     <div className="absolute top-0 right-0 p-4 opacity-5">
@@ -113,6 +121,7 @@ export const CashRegister = () => {
                             <span className="text-zinc-400 text-sm">Abertura</span>
                             <span className="text-white font-mono">R$ {cashSession.opening_balance.toFixed(2)}</span>
                         </div>
+                        {/* Summary breakdown logic could be enhanced here, showing totals per method */}
                         <div className="flex justify-between items-center p-3 bg-zinc-950 rounded-lg border border-zinc-800">
                              <span className="text-zinc-400 text-sm">Vendas/Recebimentos</span>
                              <span className="text-green-500 font-mono">+ R$ {totalIn.toFixed(2)}</span>
@@ -125,6 +134,7 @@ export const CashRegister = () => {
                 </div>
             </div>
 
+            {/* Right: Timeline */}
             <div className="lg:col-span-2 bg-zinc-900 border border-zinc-800 rounded-2xl p-6 h-fit">
                 <h3 className="text-white font-bold mb-6 flex items-center gap-2">
                     <ICONS.Trending size={20} /> Movimentações
@@ -186,8 +196,8 @@ export const CashRegister = () => {
           </div>
       )}
 
-      {/* Modals omitted for brevity but logic is handled by showModal state above */}
-       {showModal === 'OPEN' && (
+      {/* Modals */}
+      {showModal === 'OPEN' && (
          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl w-full max-w-md">
                 <h3 className="text-xl font-bold text-white mb-4">Abertura de Caixa</h3>
@@ -212,6 +222,7 @@ export const CashRegister = () => {
          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl w-full max-w-md">
                 <h3 className="text-xl font-bold text-white mb-4">Nova Movimentação</h3>
+                
                 <label className="text-xs font-semibold text-zinc-500 uppercase mb-2 block">Valor (R$)</label>
                 <input 
                     type="number" 
@@ -221,6 +232,7 @@ export const CashRegister = () => {
                     value={formAmount}
                     onChange={e => setFormAmount(e.target.value)}
                 />
+                
                 <label className="text-xs font-semibold text-zinc-500 uppercase mb-2 block">Descrição / Motivo</label>
                 <input 
                     type="text" 
@@ -229,6 +241,7 @@ export const CashRegister = () => {
                     value={formDesc}
                     onChange={e => setFormDesc(e.target.value)}
                 />
+
                 <div className="grid grid-cols-2 gap-3 mb-4">
                      <button 
                         onClick={() => handleMovement('SUPPLY')}
@@ -253,6 +266,7 @@ export const CashRegister = () => {
             <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl w-full max-w-lg">
                 <h3 className="text-xl font-bold text-white mb-1">Conferência de Fechamento</h3>
                 <p className="text-zinc-500 text-sm mb-6">Informe os valores contados fisicamente.</p>
+                
                 <div className="space-y-4 mb-8">
                      <div>
                         <label className="text-xs font-semibold text-zinc-500 uppercase mb-2 block">Dinheiro em Espécie</label>
@@ -287,10 +301,12 @@ export const CashRegister = () => {
                         </div>
                      </div>
                 </div>
+
                 <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 mb-6 flex justify-between items-center">
                      <span className="text-zinc-400">Total Esperado pelo Sistema</span>
                      <span className="text-white font-bold">R$ {currentTotal.toFixed(2)}</span>
                 </div>
+
                 <div className="flex gap-3">
                     <button onClick={() => setShowModal(null)} className="flex-1 py-3 text-zinc-400 hover:bg-zinc-800 rounded-xl">Cancelar</button>
                     <button onClick={handleCloseRegister} className="flex-1 py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl shadow-lg shadow-red-900/20">Finalizar Dia</button>
