@@ -1,59 +1,67 @@
 import React from 'react';
-import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { StoreProvider, useStore } from './context/StoreContext';
 import { Layout } from './components/Layout';
+
+// Imports das Páginas
+import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { NewSale } from './pages/NewSale';
 import { Clients } from './pages/Clients';
 import { Inventory } from './pages/Inventory';
-import { History } from './pages/History';
-import { CashRegister } from './pages/CashRegister';
-import { Reports } from './pages/Reports';
-import { Catalog } from './pages/Catalog';
-import { Settings } from './pages/Settings';
 import { Expenses } from './pages/Expenses';
-import { Login } from './pages/Login';
-import { StoreProvider, useStore } from './context/StoreContext';
+import { Reports } from './pages/Reports';
+import { Settings } from './pages/Settings';
+import { History } from './pages/History';         // <--- Importante
+import { CashRegister } from './pages/CashRegister'; // <--- Importante
+import { Catalog } from './pages/Catalog';           // <--- Importante
 
-// Protected Route Component
-const ProtectedRoute = ({ children }: { children?: React.ReactNode }) => {
-  const { isAuthenticated } = useStore();
-  const location = useLocation();
-
-  if (!isAuthenticated) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
-  }
-
-  return <Layout>{children}</Layout>;
+// Componente para Proteger Rotas
+const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
+  const { isAuthenticated, isLoading } = useStore();
+  
+  if (isLoading) return <div className="h-screen bg-black flex items-center justify-center text-white">Carregando...</div>;
+  
+  return isAuthenticated ? <Layout>{children}</Layout> : <Navigate to="/login" />;
 };
 
-function AppRoutes() {
-  return (
-    <Routes>
-      <Route path="/login" element={<Login />} />
-      
-      {/* Protected Routes Wrapped in Layout */}
-      <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-      <Route path="/sales/new" element={<ProtectedRoute><NewSale /></ProtectedRoute>} />
-      <Route path="/clients" element={<ProtectedRoute><Clients /></ProtectedRoute>} />
-      <Route path="/sales/history" element={<ProtectedRoute><History /></ProtectedRoute>} />
-      <Route path="/inventory" element={<ProtectedRoute><Inventory /></ProtectedRoute>} />
-      <Route path="/register" element={<ProtectedRoute><CashRegister /></ProtectedRoute>} />
-      <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
-      <Route path="/catalog" element={<ProtectedRoute><Catalog /></ProtectedRoute>} />
-      <Route path="/expenses" element={<ProtectedRoute><Expenses /></ProtectedRoute>} />
-      <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-      
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
-  );
-}
+const AppRoutes = () => {
+    const { isAuthenticated } = useStore();
+
+    return (
+        <Routes>
+            {/* Rota Pública */}
+            <Route path="/login" element={!isAuthenticated ? <Login /> : <Navigate to="/" />} />
+            
+            {/* Rotas Protegidas (Dentro do Layout) */}
+            <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+            <Route path="/sales/new" element={<PrivateRoute><NewSale /></PrivateRoute>} />
+            
+            {/* Rota corrigida para Catálogo/Histórico */}
+            <Route path="/sales" element={<PrivateRoute><History /></PrivateRoute>} />
+            
+            <Route path="/clients" element={<PrivateRoute><Clients /></PrivateRoute>} />
+            <Route path="/inventory" element={<PrivateRoute><Inventory /></PrivateRoute>} />
+            <Route path="/expenses" element={<PrivateRoute><Expenses /></PrivateRoute>} />
+            <Route path="/reports" element={<PrivateRoute><Reports /></PrivateRoute>} />
+            <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
+            
+            {/* Rotas Extras que você já tem os arquivos */}
+            <Route path="/cash-register" element={<PrivateRoute><CashRegister /></PrivateRoute>} />
+            <Route path="/catalog" element={<PrivateRoute><Catalog /></PrivateRoute>} />
+
+            {/* Rota padrão (Catch-all) */}
+            <Route path="*" element={<Navigate to="/" />} />
+        </Routes>
+    );
+};
 
 function App() {
   return (
     <StoreProvider>
-      <HashRouter>
+      <BrowserRouter>
         <AppRoutes />
-      </HashRouter>
+      </BrowserRouter>
     </StoreProvider>
   );
 }

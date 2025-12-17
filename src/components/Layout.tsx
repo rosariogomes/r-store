@@ -2,7 +2,7 @@ import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, ShoppingCart, Users, Package, FileText, Settings, LogOut, 
-  DollarSign, ListChecks, Receipt, PlusCircle, CreditCard
+  DollarSign, History, Grid3X3, PlusCircle, CreditCard
 } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 
@@ -25,7 +25,7 @@ const NavItem = ({ to, icon: Icon, label }: { to: string; icon: any; label: stri
 };
 
 export const Layout = ({ children }: { children?: React.ReactNode }) => {
-  const { logout, storeConfig, user } = useStore(); // Agora pegamos o 'user' do contexto
+  const { logout, storeConfig, user } = useStore();
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -58,8 +58,16 @@ export const Layout = ({ children }: { children?: React.ReactNode }) => {
         <nav className="flex-1 space-y-1.5 px-4 overflow-y-auto custom-scrollbar">
           <NavItem to="/" icon={LayoutDashboard} label="Dashboard" />
           <NavItem to="/sales/new" icon={PlusCircle} label="Nova Venda" />
-          <NavItem to="/cash-register" icon={CreditCard} label="Caixa" /> {/* Ajuste a rota se necessário */}
-          <NavItem to="/sales" icon={ListChecks} label="Catálogo / Histórico" />
+          <NavItem to="/cash-register" icon={CreditCard} label="Caixa" />
+          
+          <div className="my-2 border-t border-zinc-800/50" />
+          
+          {/* MENU SEPARADO AQUI */}
+          <NavItem to="/catalog" icon={Grid3X3} label="Catálogo Digital" />
+          <NavItem to="/sales" icon={History} label="Histórico Vendas" />
+          
+          <div className="my-2 border-t border-zinc-800/50" />
+
           <NavItem to="/clients" icon={Users} label="Clientes" />
           <NavItem to="/inventory" icon={Package} label="Estoque" />
           <NavItem to="/expenses" icon={DollarSign} label="Despesas" />
@@ -70,14 +78,13 @@ export const Layout = ({ children }: { children?: React.ReactNode }) => {
           </div>
         </nav>
 
-        {/* User Footer (NOVO) */}
+        {/* User Footer */}
         <div className="p-4 border-t border-zinc-800 bg-zinc-900/30">
           <div className="flex items-center gap-3 mb-4 px-2">
               <div className="w-10 h-10 rounded-full bg-zinc-800 overflow-hidden border border-zinc-700 shrink-0">
                   {user?.avatar_url ? (
                       <img src={user.avatar_url} alt="User" className="w-full h-full object-cover" />
                   ) : (
-                      // Silhueta Padrão
                       <div className="w-full h-full flex items-center justify-center bg-zinc-800 text-zinc-500">
                           <Users size={20} />
                       </div>
@@ -117,16 +124,16 @@ export const Layout = ({ children }: { children?: React.ReactNode }) => {
         <NavLink to="/" className={({isActive}) => isActive ? "text-brand-600" : "text-zinc-500"}>
             <LayoutDashboard size={24} />
         </NavLink>
-        <NavLink to="/inventory" className={({isActive}) => isActive ? "text-brand-600" : "text-zinc-500"}>
-            <Package size={24} />
+        <NavLink to="/catalog" className={({isActive}) => isActive ? "text-brand-600" : "text-zinc-500"}>
+            <Grid3X3 size={24} />
         </NavLink>
         <NavLink to="/sales/new" className={({isActive}) => isActive ? "text-brand-600" : "text-zinc-500"}>
             <div className="bg-brand-600 p-3 rounded-full -mt-8 border-4 border-zinc-950 text-white shadow-lg shadow-brand-900/50">
               <PlusCircle size={24} />
             </div>
         </NavLink>
-        <NavLink to="/expenses" className={({isActive}) => isActive ? "text-brand-600" : "text-zinc-500"}>
-            <Receipt size={24} />
+        <NavLink to="/sales" className={({isActive}) => isActive ? "text-brand-600" : "text-zinc-500"}>
+            <History size={24} />
         </NavLink>
         <NavLink to="/settings" className={({isActive}) => isActive ? "text-brand-600" : "text-zinc-500"}>
             <Settings size={24} />
