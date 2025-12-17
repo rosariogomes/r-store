@@ -1,105 +1,90 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
 import { useStore } from '../context/StoreContext';
-import { ICONS } from '../constants';
+import { User, Lock, Upload, Loader2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom'; // <--- IMPORTANTE
 
 export const Login = () => {
-  const navigate = useNavigate();
-  const { login, storeConfig } = useStore();
+  const { login, register, user } = useStore(); // Pegamos 'user' também
+  const navigate = useNavigate(); // Hook de navegação
   
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [isRegistering, setIsRegistering] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [cpf, setCpf] = useState('');
+  const [avatar, setAvatar] = useState<File | null>(null);
+
+  // Efeito de Redirecionamento Automático
+  // Se o contexto detectar que tem usuário, manda pro Dashboard na hora
+  useEffect(() => {
+    if (user) {
+        console.log("Usuário detectado, redirecionando...");
+        navigate('/');
+    }
+  }, [user, navigate]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
     setIsLoading(true);
 
-    // Simulated Authentication
-    setTimeout(() => {
-        if (email === 'admin' && password === 'admin') {
-            login();
-            navigate('/');
+    if (isRegistering) {
+        let role: 'GESTOR' | 'STANDARD' = 'STANDARD';
+        if (email.toLowerCase() === 'sidney.lucena@gmail.com') role = 'GESTOR';
+        
+        const { error } = await register(email, password, { name, cpf, role, avatarFile: avatar || undefined });
+        if (error) {
+            alert(error);
         } else {
-            setError('Credenciais inválidas. Tente admin/admin');
-            setIsLoading(false);
+            alert("Cadastro realizado! O sistema fará o login automático.");
+            // O próprio contexto vai atualizar o 'user' e o useEffect acima vai redirecionar
         }
-    }, 800);
+    } else {
+        const { error } = await login(email, password);
+        if (error) {
+            alert("Erro: " + error);
+        } else {
+            // Sucesso! Força a navegação
+            navigate('/');
+        }
+    }
+    setIsLoading(false);
   };
 
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center p-4 relative overflow-hidden">
-        {/* Background Effects */}
-        <div className="absolute top-[-20%] left-[-20%] w-[500px] h-[500px] bg-brand-600/20 rounded-full blur-[128px]" />
-        <div className="absolute bottom-[-20%] right-[-20%] w-[500px] h-[500px] bg-purple-600/10 rounded-full blur-[128px]" />
+    <div className="min-h-screen bg-black flex items-center justify-center p-4">
+      <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-2xl w-full max-w-md shadow-2xl">
+        <div className="text-center mb-8">
+            <div className="w-16 h-16 bg-red-600 rounded-2xl flex items-center justify-center mx-auto mb-4 text-white font-bold text-2xl">R</div>
+            <h1 className="text-2xl font-bold text-white">{isRegistering ? 'Criar Conta' : 'Acessar Sistema'}</h1>
+        </div>
 
-        <div className="w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-3xl p-8 md:p-12 shadow-2xl relative z-10 animate-fade-in">
-            <div className="text-center mb-10">
-                <div className="w-20 h-20 bg-zinc-900 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-brand-900/40 border border-zinc-800 overflow-hidden">
-                    {storeConfig.logo_url ? (
-                         <img src={storeConfig.logo_url} alt="Logo" className="w-full h-full object-cover" />
-                    ) : (
-                         <span className="text-3xl font-bold text-white">{storeConfig.name.charAt(0)}</span>
-                    )}
-                </div>
-                <h1 className="text-3xl font-bold text-white mb-2">{storeConfig.name}</h1>
-                <p className="text-zinc-500">{storeConfig.subtitle}</p>
+        <form onSubmit={handleSubmit} className="space-y-4">
+            {isRegistering && (
+                <>
+                    <input type="text" placeholder="Nome" className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-white" value={name} onChange={e => setName(e.target.value)} />
+                    <input type="text" placeholder="CPF" className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-white" value={cpf} onChange={e => setCpf(e.target.value)} />
+                    <input type="file" className="w-full text-white" onChange={e => setAvatar(e.target.files?.[0] || null)} />
+                </>
+            )}
+            <div className="relative">
+                <User className="absolute left-3 top-3 text-zinc-500" size={18} />
+                <input type="email" placeholder="Email" className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-3 pl-10 text-white" value={email} onChange={e => setEmail(e.target.value)} />
+            </div>
+            <div className="relative">
+                <Lock className="absolute left-3 top-3 text-zinc-500" size={18} />
+                <input type="password" placeholder="Senha" className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-3 pl-10 text-white" value={password} onChange={e => setPassword(e.target.value)} />
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
-                <div>
-                    <label className="text-xs font-bold text-zinc-500 uppercase mb-2 block tracking-wider">Usuário</label>
-                    <div className="relative">
-                        <ICONS.Clients className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-600" size={20} />
-                        <input 
-                            type="text" 
-                            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3.5 pl-12 pr-4 text-white focus:outline-none focus:border-brand-600 focus:bg-zinc-900/80 transition-all"
-                            placeholder="admin"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                        />
-                    </div>
-                </div>
-
-                <div>
-                    <label className="text-xs font-bold text-zinc-500 uppercase mb-2 block tracking-wider">Senha</label>
-                    <div className="relative">
-                        <ICONS.Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-600" size={20} />
-                        <input 
-                            type="password" 
-                            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-3.5 pl-12 pr-4 text-white focus:outline-none focus:border-brand-600 focus:bg-zinc-900/80 transition-all"
-                            placeholder="••••••"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                        />
-                    </div>
-                </div>
-
-                {error && (
-                    <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-500 text-sm text-center font-medium">
-                        {error}
-                    </div>
-                )}
-
-                <button 
-                    type="submit"
-                    disabled={isLoading}
-                    className="w-full py-4 bg-brand-600 hover:bg-brand-500 text-white font-bold rounded-xl shadow-lg shadow-brand-900/30 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-                >
-                    {isLoading ? (
-                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    ) : (
-                        <span>Entrar no Sistema</span>
-                    )}
-                </button>
-            </form>
-
-            <p className="mt-8 text-center text-zinc-600 text-xs">
-                &copy; {new Date().getFullYear()} {storeConfig.name}. Todos os direitos reservados.
-            </p>
-        </div>
+            <button type="submit" disabled={isLoading} className="w-full py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl flex justify-center gap-2">
+                {isLoading ? <Loader2 className="animate-spin" /> : (isRegistering ? 'Cadastrar' : 'Entrar')}
+            </button>
+        </form>
+        <button onClick={() => setIsRegistering(!isRegistering)} className="w-full mt-4 text-sm text-zinc-500 hover:text-white">
+            {isRegistering ? 'Já tem conta? Login' : 'Criar conta'}
+        </button>
+      </div>
     </div>
   );
 };

@@ -1,12 +1,28 @@
+// --- TIPOS DE USUÁRIO E PERMISSÕES (NOVO) ---
+export type UserRole = 'GESTOR' | 'ADMIN' | 'STANDARD';
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  name: string;
+  cpf: string;
+  avatar_url?: string;
+  role: UserRole;
+}
+
+// --- TIPOS DO SISTEMA ---
+
 export interface Client {
   id: string;
   name: string;
-  whatsapp: string;
-  trust_score: number;
-  credit_limit: number;
-  current_debt: number;
-  image_url?: string;
+  whatsapp: string; // Seu campo original
+  phone: string;    // Adicionado para compatibilidade com os formulários novos
+  address?: string; // Adicionado para o cadastro completo
   birthDate?: string;
+  trust_score?: number;
+  credit_limit?: number;
+  current_debt?: number;
+  image_url?: string;
 }
 
 export interface Product {
@@ -14,17 +30,18 @@ export interface Product {
   name: string;
   cost_price: number;
   sale_price: number;
-  category: string; // Nova coluna
-  gender: 'MALE' | 'FEMALE' | 'UNISEX'; // Nova coluna
+  category: string;
+  gender: 'MALE' | 'FEMALE' | 'UNISEX';
   size: string;
   color: string;
   stock_quantity: number;
   on_bag_quantity: number;
-  image_url?: string;
+  image_url?: string; // Opcional ou obrigatório, conforme sua preferência
 }
 
 export interface SaleItem {
-  id?: string;
+  id?: string; // Opcional pois é gerado depois
+  sale_id?: string; // Vinculo com a venda
   product_id: string;
   product_name: string;
   product_image?: string;
@@ -34,7 +51,7 @@ export interface SaleItem {
   color: string;
 }
 
-export type SaleStatus = 'PENDING' | 'PAID' | 'PARTIAL';
+export type SaleStatus = 'PENDING' | 'PAID' | 'PARTIAL' | 'CANCELLED';
 export type SaleType = 'SALE' | 'BAG';
 
 export interface Sale {
@@ -47,7 +64,8 @@ export interface Sale {
   type: SaleType;
   created_at: string;
   items: SaleItem[];
-  paymentMethod?: string;
+  paymentMethod?: string; // Usado no frontend
+  payment_method?: string; // Mapeado do banco de dados (snake_case)
 }
 
 export interface Expense {
@@ -57,11 +75,12 @@ export interface Expense {
   category: 'FIXED' | 'VARIABLE' | 'MARKETING' | 'PERSONNEL' | 'TAXES';
   date: string;
   paid: boolean;
+  created_at?: string;
 }
 
 export interface CashRegisterMovement {
   id: string;
-  type: 'OPENING' | 'SALE' | 'SUPPLY' | 'BLEED' | 'RECEIPT';
+  type: 'OPENING' | 'CLOSING' | 'SALE' | 'EXPENSE' | 'SUPPLY' | 'BLEED' | 'RECEIPT';
   amount: number;
   description: string;
   timestamp: string;
@@ -86,4 +105,7 @@ export interface StoreConfig {
   phone: string;
   receiptFooter: string;
   logo_url?: string;
+  // Campos novos para o CRM
+  birthday_message?: string;
+  promo_message?: string;
 }

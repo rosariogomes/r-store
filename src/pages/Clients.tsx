@@ -3,12 +3,13 @@ import { useStore } from '../context/StoreContext';
 import { 
     Search, UserPlus, Phone, AlertCircle, CheckCircle, Wallet, 
     X, Save, MessageCircle, Megaphone, CheckSquare, Square, Send,
-    Edit, Trash2 // Novos ícones
+    Edit, Trash2 
 } from 'lucide-react';
 import { Client } from '../types';
 
 export const Clients = () => {
-  const { clients, sales, addClient, updateClient, deleteClient, storeConfig } = useStore();
+  // Adicionamos user, canDelete e canEditClients aqui
+  const { clients, sales, addClient, updateClient, deleteClient, storeConfig, canDelete, canEditClients } = useStore();
   const [searchTerm, setSearchTerm] = useState('');
   
   // Controle dos Modais
@@ -17,7 +18,7 @@ export const Clients = () => {
   
   // Estado do Formulário (Novo ou Edição)
   const [formData, setFormData] = useState({ name: '', phone: '', address: '', birthDate: '' });
-  const [editingId, setEditingId] = useState<string | null>(null); // Guarda o ID se estiver editando
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   // Estado da Promoção
   const [selectedClientsForPromo, setSelectedClientsForPromo] = useState<string[]>([]);
@@ -57,7 +58,6 @@ export const Clients = () => {
 
   const handleOpenModal = (client?: Client) => {
       if (client) {
-          // Modo Edição
           setEditingId(client.id);
           setFormData({
               name: client.name,
@@ -66,7 +66,6 @@ export const Clients = () => {
               birthDate: client.birthDate || ''
           });
       } else {
-          // Modo Criação
           setEditingId(null);
           setFormData({ name: '', phone: '', address: '', birthDate: '' });
       }
@@ -80,16 +79,14 @@ export const Clients = () => {
     const clientData = {
       name: formData.name,
       phone: formData.phone,
-      whatsapp: formData.phone, // Mantém compatibilidade
+      whatsapp: formData.phone,
       address: formData.address,
       birthDate: formData.birthDate
     };
 
     if (editingId) {
-        // Atualizar
         await updateClient({ id: editingId, ...clientData } as Client);
     } else {
-        // Criar Novo
         await addClient({ id: Date.now().toString(), ...clientData, current_debt: 0 } as Client);
     }
 
@@ -99,9 +96,7 @@ export const Clients = () => {
   };
 
   const handleDeleteClient = (id: string) => {
-      // Primeira confirmação
       if (window.confirm("Tem certeza que deseja excluir este cliente?")) {
-          // Segunda confirmação
           if (window.confirm("ATENÇÃO: Essa ação apagará o histórico e é irreversível. Confirmar exclusão?")) {
               deleteClient(id);
           }
@@ -193,7 +188,6 @@ export const Clients = () => {
           <div key={client.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 hover:border-zinc-700 transition-all group relative overflow-hidden">
             {client.calculatedDebt > 0 && <div className="absolute left-0 top-0 bottom-0 w-1 bg-orange-500" />}
             
-            {/* Header do Card com Ações */}
             <div className="flex justify-between items-start mb-4 pl-2">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-full bg-zinc-800 flex items-center justify-center text-white font-bold shrink-0 text-lg border border-zinc-700">
@@ -215,22 +209,29 @@ export const Clients = () => {
                 </div>
               </div>
               
-              {/* Botões de Ação (Editar / Excluir) */}
+              {/* --- BOTÕES PROTEGIDOS --- */}
               <div className="flex gap-1">
-                  <button 
-                    onClick={() => handleOpenModal(client)}
-                    className="p-2 text-zinc-500 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors"
-                    title="Editar Cliente"
-                  >
-                      <Edit size={18} />
-                  </button>
-                  <button 
-                    onClick={() => handleDeleteClient(client.id)}
-                    className="p-2 text-zinc-500 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
-                    title="Excluir Cliente"
-                  >
-                      <Trash2 size={18} />
-                  </button>
+                  {/* Edição: Só Gestor/Admin */}
+                  {canEditClients() && (
+                    <button 
+                      onClick={() => handleOpenModal(client)}
+                      className="p-2 text-zinc-500 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors"
+                      title="Editar Cliente"
+                    >
+                        <Edit size={18} />
+                    </button>
+                  )}
+                  
+                  {/* Exclusão: Só Gestor/Admin */}
+                  {canDelete() && (
+                    <button 
+                      onClick={() => handleDeleteClient(client.id)}
+                      className="p-2 text-zinc-500 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
+                      title="Excluir Cliente"
+                    >
+                        <Trash2 size={18} />
+                    </button>
+                  )}
               </div>
             </div>
 
