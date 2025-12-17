@@ -1,41 +1,44 @@
 import React, { useState, useMemo } from 'react';
-import { ICONS } from '../constants';
+import { 
+  Search, Plus, X, ArrowRight, Star, ShoppingBag, Banknote, 
+  Package, Users, AlertTriangle, Check, CreditCard 
+} from 'lucide-react';
 import { Client, Product, Sale, SaleItem } from '../types';
 import { useStore } from '../context/StoreContext';
 
-// Extended interface for Cart Item to include quantity in the cart
+// Interface estendida para itens no carrinho
 interface CartItem extends Product {
   cartQuantity: number;
 }
 
 export const NewSale = () => {
-  const { clients, products, sales, addClient, addSale } = useStore(); // Global Context
+  const { clients, products, sales, addClient, addSale } = useStore(); 
 
-  // -- Global State --
+  // -- Estados Globais --
   const [step, setStep] = useState<1 | 2>(1);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // -- Client Selection State --
+  // -- Seleção de Cliente --
   const [searchClient, setSearchClient] = useState('');
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   
-  // -- New Client Modal State --
+  // -- Modal Novo Cliente --
   const [isNewClientModalOpen, setIsNewClientModalOpen] = useState(false);
   const [newClientName, setNewClientName] = useState('');
   const [newClientPhone, setNewClientPhone] = useState('');
 
-  // -- POS / Cart State --
+  // -- PDV / Carrinho --
   const [searchProduct, setSearchProduct] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [saleType, setSaleType] = useState<'SALE' | 'BAG'>('SALE');
 
-  // -- Payment State --
+  // -- Pagamento --
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'PIX' | 'CREDIT' | 'DEBIT'>('PIX');
   const [installments, setInstallments] = useState<number>(1);
   const [interestRate, setInterestRate] = useState<number>(0);
 
   // ------------------------------------------------------------------
-  // Logic & Calculations
+  // Lógica e Cálculos
   // ------------------------------------------------------------------
 
   const filteredClients = useMemo(() => {
@@ -44,7 +47,8 @@ export const NewSale = () => {
 
   const clientHistory = useMemo(() => {
     if (!selectedClient) return [];
-    return sales.filter(s => s.client_id === selectedClient.id).sort((a, b) => 
+    // Proteção: garante que sales existe antes de filtrar
+    return (sales || []).filter(s => s.client_id === selectedClient.id).sort((a, b) => 
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     );
   }, [selectedClient, sales]);
@@ -53,13 +57,13 @@ export const NewSale = () => {
     return products.filter(p => p.name.toLowerCase().includes(searchProduct.toLowerCase()));
   }, [searchProduct, products]);
 
-  // Cart Logic
+  // Lógica do Carrinho
   const addToCart = (product: Product) => {
     setCart(prev => {
       const existing = prev.find(item => item.id === product.id);
       
-      // Check stock limit (Available = Stock - OnBag)
-      const availableStock = product.stock_quantity - product.on_bag_quantity;
+      // Checa estoque disponível (Total - Reservado em Malinha)
+      const availableStock = product.stock_quantity - (product.on_bag_quantity || 0);
       const currentQtyInCart = existing ? existing.cartQuantity : 0;
       
       if (currentQtyInCart + 1 > availableStock) {
@@ -83,13 +87,11 @@ export const NewSale = () => {
       return prev.map(item => {
         if (item.id === productId) {
           const newQty = item.cartQuantity + delta;
-          // Validate lower bound
           if (newQty < 1) return item; 
           
-          // Validate upper bound (Stock)
           const productInStore = products.find(p => p.id === productId);
           if (productInStore) {
-             const available = productInStore.stock_quantity - productInStore.on_bag_quantity;
+             const available = productInStore.stock_quantity - (productInStore.on_bag_quantity || 0);
              if (newQty > available) {
                  alert("Limite de estoque atingido.");
                  return item;
@@ -106,18 +108,15 @@ export const NewSale = () => {
     setCart(prev => prev.filter(item => item.id !== productId));
   };
 
-  // Financial Calculations
+  // Cálculos Financeiros
   const subtotal = cart.reduce((acc, item) => acc + (item.sale_price * item.cartQuantity), 0);
   const totalItems = cart.reduce((acc, item) => acc + item.cartQuantity, 0);
 
   const paymentDetails = useMemo(() => {
     let totalInterest = 0;
-    
-    // Logic: Interest applies to Credit Card OR generally if manually set
     if (interestRate > 0) {
       totalInterest = subtotal * (interestRate / 100);
     }
-
     const finalTotal = subtotal + totalInterest;
     const installmentValue = installments > 0 ? finalTotal / installments : finalTotal;
 
@@ -125,7 +124,7 @@ export const NewSale = () => {
   }, [subtotal, paymentMethod, installments, interestRate]);
 
   // ------------------------------------------------------------------
-  // Handlers
+  // Ações (Handlers)
   // ------------------------------------------------------------------
 
   const handleCreateClient = () => {
@@ -136,12 +135,14 @@ export const NewSale = () => {
     const newClient: Client = {
       id: Date.now().toString(),
       name: newClientName,
+      phone: newClientPhone, // O Contexto vai traduzir para whatsapp
       whatsapp: newClientPhone,
+      address: '',
       trust_score: 3, 
       credit_limit: 500,
       current_debt: 0
     };
-    addClient(newClient); // Context
+    addClient(newClient); 
     setSelectedClient(newClient);
     setIsNewClientModalOpen(false);
     setNewClientName('');
@@ -154,11 +155,11 @@ export const NewSale = () => {
     setIsProcessing(true);
     
     setTimeout(() => {
-      // 1. Prepare Items
+      // 1. Preparar Itens
       const saleId = Date.now().toString();
       const saleItems: SaleItem[] = cart.map(cItem => ({
           id: `si-${Date.now()}-${cItem.id}`,
-          sale_id: saleId, // Not strictly needed in NoSQL/JSON structure but good for ref
+          sale_id: saleId, 
           product_id: cItem.id,
           product_name: cItem.name,
           product_image: cItem.image_url,
@@ -168,13 +169,13 @@ export const NewSale = () => {
           color: cItem.color
       }));
 
-      // 2. Create Sale Object
+      // 2. Criar Objeto de Venda
       const newSale: Sale = {
           id: saleId,
           client_id: selectedClient.id,
           client_name: selectedClient.name,
           total_amount: paymentDetails.finalTotal,
-          paid_amount: saleType === 'SALE' ? paymentDetails.finalTotal : 0, // Sale is paid, Bag is 0 paid
+          paid_amount: saleType === 'SALE' ? paymentDetails.finalTotal : 0, // Venda paga vs Malinha (0 pago)
           status: saleType === 'SALE' ? 'PAID' : 'PENDING',
           type: saleType,
           created_at: new Date().toISOString(),
@@ -182,7 +183,7 @@ export const NewSale = () => {
           items: saleItems
       };
 
-      // 3. Execute via Context (updates Sales, Products, Clients)
+      // 3. Executar via Contexto
       addSale(newSale, cart);
 
       let msg = '';
@@ -197,7 +198,7 @@ export const NewSale = () => {
       
       alert(msg);
       
-      // Reset Flow
+      // Resetar Tela
       setIsProcessing(false);
       setCart([]);
       setStep(1);
@@ -209,14 +210,14 @@ export const NewSale = () => {
   };
 
   // ------------------------------------------------------------------
-  // Render Helpers (same as before)
+  // Renderização Auxiliar
   // ------------------------------------------------------------------
 
   const renderHistoryItem = (sale: Sale) => (
     <div key={sale.id} className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 flex items-center justify-between group hover:border-zinc-700 transition-colors">
         <div className="flex items-center gap-4">
             <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg ${sale.type === 'BAG' ? 'bg-purple-500/10 text-purple-500' : 'bg-green-500/10 text-green-500'}`}>
-                {sale.type === 'BAG' ? <ICONS.Sales size={18} /> : <ICONS.Money size={18} />}
+                {sale.type === 'BAG' ? <ShoppingBag size={18} /> : <Banknote size={18} />}
             </div>
             <div>
                 <p className="text-sm font-bold text-white">
@@ -228,7 +229,7 @@ export const NewSale = () => {
             </div>
         </div>
         <div className="text-right">
-            <p className="text-sm font-bold text-white">R$ {sale.total_amount.toFixed(2)}</p>
+            <p className="text-sm font-bold text-white">R$ {(sale.total_amount || 0).toFixed(2)}</p>
             <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${
                 sale.status === 'PAID' ? 'bg-green-500/10 text-green-500' : 
                 sale.status === 'PENDING' ? 'bg-yellow-500/10 text-yellow-500' : 
@@ -257,7 +258,7 @@ export const NewSale = () => {
                   onClick={() => setStep(1)} 
                   className="p-2 bg-zinc-900 border border-zinc-800 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
                 >
-                   <ICONS.Close size={20} className="rotate-180" /> {/* Back arrow simulation */}
+                   <ArrowRight size={20} className="rotate-180" /> {/* Voltar */}
                 </button>
                 <div>
                    <h1 className="text-2xl font-bold text-white flex items-center gap-2">
@@ -288,7 +289,7 @@ export const NewSale = () => {
             <div className={`flex flex-col bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden transition-all ${selectedClient ? 'hidden lg:flex lg:col-span-4' : 'col-span-12'}`}>
                 <div className="p-4 border-b border-zinc-800 bg-zinc-900/50 space-y-3">
                      <div className="relative">
-                        <ICONS.Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500" size={20} />
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500" size={20} />
                         <input 
                             type="text" 
                             placeholder="Buscar cliente..." 
@@ -302,7 +303,7 @@ export const NewSale = () => {
                         onClick={() => setIsNewClientModalOpen(true)}
                         className="w-full py-3 bg-zinc-800 hover:bg-zinc-700 text-white font-bold rounded-xl transition-colors border border-zinc-700 flex items-center justify-center gap-2"
                     >
-                        <ICONS.Plus size={18} />
+                        <Plus size={18} />
                         <span>Novo Cliente</span>
                     </button>
                 </div>
@@ -319,11 +320,11 @@ export const NewSale = () => {
                             }`}
                         >
                             <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${selectedClient?.id === client.id ? 'bg-brand-600 text-white' : 'bg-zinc-800 text-white'}`}>
-                                {client.name.charAt(0)}
+                                {client.name ? client.name.charAt(0) : '?'}
                             </div>
                             <div className="flex-1 min-w-0">
                                 <h3 className={`font-bold truncate ${selectedClient?.id === client.id ? 'text-brand-500' : 'text-white'}`}>{client.name}</h3>
-                                <p className="text-zinc-500 text-xs truncate">{client.whatsapp}</p>
+                                <p className="text-zinc-500 text-xs truncate">{client.whatsapp || client.phone}</p>
                             </div>
                             {client.current_debt > 0 && (
                                 <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" title="Débito Pendente" />
@@ -344,18 +345,18 @@ export const NewSale = () => {
                                      {selectedClient.image_url ? (
                                          <img src={selectedClient.image_url} alt="" className="w-full h-full object-cover" />
                                      ) : (
-                                         <div className="w-full h-full flex items-center justify-center text-2xl font-bold text-zinc-500">{selectedClient.name.charAt(0)}</div>
+                                         <div className="w-full h-full flex items-center justify-center text-2xl font-bold text-zinc-500">{selectedClient.name ? selectedClient.name.charAt(0) : '?'}</div>
                                      )}
                                  </div>
                                  <div>
                                      <h2 className="text-2xl font-bold text-white">{selectedClient.name}</h2>
                                      <div className="flex items-center gap-3 text-sm text-zinc-400 mt-1">
-                                         <span>{selectedClient.whatsapp}</span>
+                                         <span>{selectedClient.whatsapp || selectedClient.phone}</span>
                                          <span>•</span>
                                          <div className="flex gap-0.5">
-                                            {[...Array(5)].map((_, i) => (
-                                                <ICONS.Star key={i} size={12} className={i < selectedClient.trust_score ? "fill-yellow-500 text-yellow-500" : "text-zinc-700"} />
-                                            ))}
+                                             {[...Array(5)].map((_, i) => (
+                                                 <Star key={i} size={12} className={i < (selectedClient.trust_score || 3) ? "fill-yellow-500 text-yellow-500" : "text-zinc-700"} />
+                                             ))}
                                          </div>
                                      </div>
                                  </div>
@@ -365,14 +366,14 @@ export const NewSale = () => {
                                     onClick={() => setSelectedClient(null)} // Back on mobile
                                     className="lg:hidden p-3 bg-zinc-800 rounded-xl text-white"
                                  >
-                                    <ICONS.Close size={20} />
+                                    <X size={20} />
                                  </button>
                                  <button 
                                     onClick={() => setStep(2)}
                                     className="flex-1 sm:flex-none px-6 py-3 bg-brand-600 hover:bg-brand-500 text-white font-bold rounded-xl shadow-lg shadow-brand-900/20 flex items-center justify-center gap-2 transition-transform active:scale-95"
                                  >
                                      <span>Iniciar Venda</span>
-                                     <ICONS.ArrowRight size={20} />
+                                     <ArrowRight size={20} />
                                  </button>
                              </div>
                         </div>
@@ -381,7 +382,7 @@ export const NewSale = () => {
                         <div className="grid grid-cols-3 gap-1 p-4 bg-zinc-950/30 border-b border-zinc-800">
                              <div className="text-center border-r border-zinc-800 last:border-0">
                                  <p className="text-xs text-zinc-500 uppercase font-bold mb-1">Total Gasto</p>
-                                 <p className="text-white font-bold">R$ {clientHistory.reduce((acc, s) => acc + s.total_amount, 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+                                 <p className="text-white font-bold">R$ {clientHistory.reduce((acc, s) => acc + (s.total_amount || 0), 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
                              </div>
                              <div className="text-center border-r border-zinc-800 last:border-0">
                                  <p className="text-xs text-zinc-500 uppercase font-bold mb-1">Última Compra</p>
@@ -390,7 +391,7 @@ export const NewSale = () => {
                              <div className="text-center border-r border-zinc-800 last:border-0">
                                  <p className="text-xs text-zinc-500 uppercase font-bold mb-1">Dívida Atual</p>
                                  <p className={`${selectedClient.current_debt > 0 ? 'text-red-500' : 'text-green-500'} font-bold`}>
-                                     R$ {selectedClient.current_debt.toFixed(2)}
+                                     R$ {(selectedClient.current_debt || 0).toFixed(2)}
                                  </p>
                              </div>
                         </div>
@@ -398,7 +399,7 @@ export const NewSale = () => {
                         {/* History List */}
                         <div className="flex-1 overflow-hidden flex flex-col bg-zinc-900/50">
                             <div className="p-4 flex items-center gap-2">
-                                <ICONS.Sales size={18} className="text-zinc-500" />
+                                <ShoppingBag size={18} className="text-zinc-500" />
                                 <h3 className="font-bold text-white">Histórico de Vendas</h3>
                             </div>
                             <div className="flex-1 overflow-y-auto p-4 pt-0 custom-scrollbar space-y-3">
@@ -406,7 +407,7 @@ export const NewSale = () => {
                                     clientHistory.map(sale => renderHistoryItem(sale))
                                 ) : (
                                     <div className="h-40 flex flex-col items-center justify-center text-zinc-500 border-2 border-dashed border-zinc-800 rounded-xl m-2">
-                                        <ICONS.Inventory size={32} className="mb-2 opacity-50" />
+                                        <Package size={32} className="mb-2 opacity-50" />
                                         <p className="text-sm">Nenhuma venda registrada para este cliente.</p>
                                     </div>
                                 )}
@@ -416,7 +417,7 @@ export const NewSale = () => {
                 ) : (
                     <div className="flex flex-col items-center gap-4 opacity-50">
                         <div className="w-20 h-20 bg-zinc-800 rounded-full flex items-center justify-center">
-                            <ICONS.Clients size={40} />
+                            <Users size={40} />
                         </div>
                         <div className="text-center">
                             <h3 className="text-xl font-bold text-white">Selecione um Cliente</h3>
@@ -437,7 +438,7 @@ export const NewSale = () => {
                 {/* Search Bar */}
                 <div className="p-4 border-b border-zinc-800 bg-zinc-900/50">
                     <div className="relative">
-                        <ICONS.Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500" size={20} />
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500" size={20} />
                         <input 
                             type="text" 
                             placeholder="Buscar produto por nome, código..." 
@@ -454,7 +455,7 @@ export const NewSale = () => {
                         {filteredProducts.map(product => {
                             const inCart = cart.find(i => i.id === product.id)?.cartQuantity || 0;
                             // Calculate REAL availability
-                            const available = (product.stock_quantity - product.on_bag_quantity) - inCart;
+                            const available = (product.stock_quantity - (product.on_bag_quantity || 0)) - inCart;
                             const isOOS = available <= 0;
 
                             return (
@@ -469,7 +470,11 @@ export const NewSale = () => {
                                     }`}
                                 >
                                     <div className="aspect-[3/4] w-full bg-zinc-900 relative">
-                                        <img src={product.image_url} alt={product.name} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
+                                        {product.image_url ? (
+                                             <img src={product.image_url} alt={product.name} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center"><Package className="text-zinc-700"/></div>
+                                        )}
                                         {isOOS && (
                                             <div className="absolute inset-0 bg-black/60 flex items-center justify-center flex-col p-2">
                                                 <span className="text-white font-bold text-xs bg-red-600 px-2 py-1 rounded mb-1">INDISPONÍVEL</span>
@@ -494,7 +499,7 @@ export const NewSale = () => {
                                         </div>
                                         <div className="mt-2 flex justify-between items-center text-[10px] font-medium">
                                             <span className="text-zinc-500">Disp: {available}</span>
-                                            {product.on_bag_quantity > 0 && <span className="text-purple-400">Malinha: {product.on_bag_quantity}</span>}
+                                            {(product.on_bag_quantity || 0) > 0 && <span className="text-purple-400">Malinha: {product.on_bag_quantity}</span>}
                                         </div>
                                     </div>
                                 </button>
@@ -529,18 +534,22 @@ export const NewSale = () => {
                 <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
                     {cart.length === 0 ? (
                         <div className="h-full flex flex-col items-center justify-center text-zinc-600 space-y-4 opacity-50">
-                            <ICONS.Sales size={48} className="stroke-1" />
+                            <ShoppingBag size={48} className="stroke-1" />
                             <p className="text-sm">Carrinho vazio</p>
                         </div>
                     ) : (
                         cart.map(item => (
                             <div key={item.id} className="flex gap-3 bg-zinc-950 p-3 rounded-xl border border-zinc-800">
-                                <img src={item.image_url} alt="" className="w-12 h-16 object-cover rounded-lg bg-zinc-900" />
+                                {item.image_url ? (
+                                    <img src={item.image_url} alt="" className="w-12 h-16 object-cover rounded-lg bg-zinc-900" />
+                                ) : (
+                                    <div className="w-12 h-16 rounded-lg bg-zinc-900 flex items-center justify-center"><Package size={20} className="text-zinc-700"/></div>
+                                )}
                                 <div className="flex-1 flex flex-col justify-between">
                                     <div className="flex justify-between items-start">
                                         <span className="text-sm font-medium text-white line-clamp-1">{item.name}</span>
                                         <button onClick={() => removeFromCart(item.id)} className="text-zinc-600 hover:text-red-500">
-                                            <ICONS.Close size={14} />
+                                            <X size={14} />
                                         </button>
                                     </div>
                                     <div className="flex justify-between items-end">
@@ -621,7 +630,7 @@ export const NewSale = () => {
                     {saleType === 'BAG' && (
                          <div className="space-y-3 pt-2">
                              <div className="flex items-center gap-2 p-2 bg-purple-500/10 border border-purple-500/20 rounded-lg">
-                                <ICONS.Alert size={16} className="text-purple-400" />
+                                <AlertTriangle size={16} className="text-purple-400" />
                                 <span className="text-xs text-purple-200">Itens serão reservados. Dívida será criada.</span>
                              </div>
                              
@@ -650,7 +659,7 @@ export const NewSale = () => {
                         onClick={handleFinish}
                         className="w-full py-3.5 bg-brand-600 hover:bg-brand-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl shadow-lg shadow-brand-900/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
                     >
-                        {isProcessing ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <ICONS.Check size={20} />}
+                        {isProcessing ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Check size={20} />}
                         <span>{saleType === 'SALE' ? 'Finalizar Venda' : 'Confirmar Malinha'}</span>
                     </button>
                 </div>
@@ -663,7 +672,7 @@ export const NewSale = () => {
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-md shadow-2xl relative">
                 <button onClick={() => setIsNewClientModalOpen(false)} className="absolute top-4 right-4 text-zinc-500 hover:text-white">
-                    <ICONS.Close size={24} />
+                    <X size={24} />
                 </button>
                 <h3 className="text-xl font-bold text-white mb-1">Novo Cliente</h3>
                 <p className="text-zinc-400 text-sm mb-6">Cadastro rápido para venda.</p>

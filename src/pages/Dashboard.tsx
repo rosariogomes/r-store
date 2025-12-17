@@ -1,400 +1,213 @@
-import React, { useMemo, useState } from 'react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { useNavigate } from 'react-router-dom';
-import { ICONS } from '../constants';
+import React, { useMemo } from 'react';
 import { useStore } from '../context/StoreContext';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { Link } from 'react-router-dom';
+import { DollarSign, Wallet, TrendingUp, Package, History, Gift, MessageCircle } from 'lucide-react';
 
-// --- Data Helpers ---
-
-const getChartData = () => [
-  { name: 'Seg', vendas: 4000, receber: 2400 },
-  { name: 'Ter', vendas: 3000, receber: 1398 },
-  { name: 'Qua', vendas: 2000, receber: 9800 },
-  { name: 'Qui', vendas: 2780, receber: 3908 },
-  { name: 'Sex', vendas: 1890, receber: 4800 },
-  { name: 'Sab', vendas: 2390, receber: 3800 },
-  { name: 'Dom', vendas: 3490, receber: 4300 },
-];
-
-const openWhatsApp = (phone: string, message: string = "") => {
-    const cleanPhone = phone.replace(/\D/g, '');
-    const finalPhone = cleanPhone.length <= 11 ? `55${cleanPhone}` : cleanPhone;
-    window.open(`https://wa.me/${finalPhone}?text=${encodeURIComponent(message)}`, '_blank');
-};
-
-// --- Components ---
-
-const StatCard = ({ title, value, subtext, icon: Icon, trend, colorClass = "text-white", onClick }: any) => (
-  <div 
-    onClick={onClick}
-    className={`bg-zinc-900 border border-zinc-800 p-6 rounded-2xl relative overflow-hidden group hover:border-zinc-700 transition-all ${onClick ? 'cursor-pointer hover:bg-zinc-800/30' : ''}`}
-  >
-    <div className="flex justify-between items-start mb-4 relative z-10">
-        <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-800 text-zinc-400 group-hover:text-white transition-colors">
-            <Icon size={22} />
+const StatCard = ({ title, value, icon: Icon, color, to }: any) => (
+  <Link to={to || '#'} className="block h-full">
+    <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl hover:border-zinc-700 transition-all group cursor-pointer relative overflow-hidden h-full">
+      {Icon && (
+        <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+          <Icon size={80} />
         </div>
-        {trend && (
-            <span className={`text-xs font-bold px-2 py-1 rounded-full border ${trend > 0 ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-red-500/10 text-red-500 border-red-500/20'}`}>
-                {trend > 0 ? '+' : ''}{trend}%
-            </span>
-        )}
+      )}
+      <div className="flex items-start justify-between mb-4">
+        <div>
+          <p className="text-zinc-400 text-sm font-medium mb-1">{title}</p>
+          <h3 className={`text-2xl font-bold ${color}`}>{value}</h3>
+        </div>
+        <div className={`p-3 rounded-xl bg-zinc-950 border border-zinc-800 ${color.replace('text-', 'bg-opacity-10 ')}`}>
+          {Icon && <Icon size={24} className={color} />}
+        </div>
+      </div>
     </div>
-    <div className="relative z-10">
-        <p className="text-zinc-500 text-sm font-medium mb-1">{title}</p>
-        <h3 className={`text-2xl font-bold tracking-tight ${colorClass}`}>{value}</h3>
-        {subtext && <p className="text-xs text-zinc-600 mt-2">{subtext}</p>}
-    </div>
-    {/* Decorative Background Blob */}
-    <div className={`absolute -right-4 -bottom-4 w-24 h-24 rounded-full blur-3xl opacity-10 group-hover:opacity-20 transition-opacity ${colorClass.includes('red') || colorClass.includes('brand') ? 'bg-brand-600' : 'bg-zinc-500'}`} />
-  </div>
-);
-
-const QuickAction = ({ icon: Icon, label, onClick, highlight = false }: any) => (
-    <button 
-        onClick={onClick}
-        className={`flex flex-col items-center justify-center gap-3 p-4 rounded-xl border transition-all active:scale-[0.98] ${
-            highlight 
-            ? 'bg-brand-600 border-brand-500 text-white shadow-lg shadow-brand-900/30' 
-            : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-white hover:border-zinc-700'
-        }`}
-    >
-        <Icon size={24} />
-        <span className="text-xs font-bold">{label}</span>
-    </button>
+  </Link>
 );
 
 export const Dashboard = () => {
-  const navigate = useNavigate();
-  const { clients, products, sales } = useStore(); // Global Context
-  const [isBagsModalOpen, setIsBagsModalOpen] = useState(false);
-  
-  const birthdays = useMemo(() => {
-    const today = new Date();
-    const currentMonth = today.getMonth() + 1;
-    const currentDay = today.getDate();
+  const { sales, expenses, products, clients, storeConfig } = useStore();
 
-    return clients.filter(c => {
-        if (!c.birthDate) return false;
-        const [_, month, day] = c.birthDate.split('-').map(Number); // Assuming YYYY-MM-DD
-        return month === currentMonth && day === currentDay;
-    });
+  const summary = useMemo(() => {
+    const safeSales = sales || [];
+    const safeExpenses = expenses || [];
+    const safeProducts = products || [];
+
+    const totalRevenue = safeSales.filter(s => s.status === 'PAID').reduce((acc, curr) => acc + (curr.paid_amount || 0), 0);
+    const pendingSales = safeSales.filter(s => s.status !== 'PAID' && s.status !== 'CANCELLED').reduce((acc, curr) => acc + ((curr.total_amount || 0) - (curr.paid_amount || 0)), 0);
+    const totalExpenses = safeExpenses.reduce((acc, curr) => acc + (curr.amount || 0), 0);
+    const profit = totalRevenue - totalExpenses;
+    const totalStock = safeProducts.reduce((acc, curr) => acc + (curr.stock_quantity || 0), 0);
+
+    return { totalRevenue, pendingSales, profit, totalStock };
+  }, [sales, expenses, products]);
+
+  // --- LÓGICA DE ANIVERSARIANTES ---
+  const birthdays = useMemo(() => {
+      if (!clients) return [];
+      const today = new Date();
+      const currentYear = today.getFullYear();
+      
+      const startOfWeek = new Date(today);
+      startOfWeek.setDate(today.getDate() - today.getDay());
+      startOfWeek.setHours(0,0,0,0);
+      
+      const endOfWeek = new Date(today);
+      endOfWeek.setDate(today.getDate() + (6 - today.getDay()));
+      endOfWeek.setHours(23,59,59,999);
+
+      return clients.filter(c => {
+          if (!c.birthDate) return false;
+          const [year, month, day] = c.birthDate.split('-').map(Number);
+          // Mês no JS começa em 0 (Jan = 0)
+          const bdayThisYear = new Date(currentYear, month - 1, day);
+          
+          return bdayThisYear >= startOfWeek && bdayThisYear <= endOfWeek;
+      }).sort((a, b) => {
+          const [, mA, dA] = (a.birthDate || '').split('-');
+          const [, mB, dB] = (b.birthDate || '').split('-');
+          return parseInt(dA) - parseInt(dB);
+      });
   }, [clients]);
 
-  const metrics = useMemo(() => {
-    const totalDebt = clients.reduce((acc, c) => acc + c.current_debt, 0);
-    const totalInventory = products.reduce((acc, p) => acc + (p.sale_price * p.stock_quantity), 0);
-    const activeBags = sales.filter(s => s.type === 'BAG' && s.status === 'PENDING').length;
-    const monthlySales = sales
-        .filter(s => s.type === 'SALE' && s.status === 'PAID')
-        .reduce((acc, s) => acc + s.total_amount, 0);
+  const openBirthdayChat = (phone: string, name: string) => {
+      if(!phone) return alert('Sem telefone cadastrado');
+      const msg = storeConfig.birthday_message?.replace('{nome}', name) || `Parabéns ${name}!`;
+      const num = phone.replace(/\D/g, '');
+      window.open(`https://wa.me/55${num}?text=${encodeURIComponent(msg)}`, '_blank');
+  };
 
-    return { totalDebt, totalInventory, activeBags, monthlySales };
-  }, [clients, products, sales]);
-
-  const overdueClients = clients.filter(c => c.current_debt > 0).sort((a,b) => b.current_debt - a.current_debt).slice(0, 3); // Top 3 debtors
-  const lowStock = products.filter(p => p.stock_quantity < 3).slice(0, 5);
-
-  // Get active bags list for modal
-  const activeBagsList = useMemo(() => {
-    return sales.filter(s => s.type === 'BAG' && s.status === 'PENDING');
+  // Chart Data
+  const chartData = useMemo(() => {
+    if (!sales) return [];
+    const data = [];
+    const today = new Date();
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toLocaleDateString('en-CA');
+      const daySales = sales.filter(s => {
+            if (!s.created_at) return false;
+            const saleDate = new Date(s.created_at).toLocaleDateString('en-CA');
+            return saleDate === dateStr && s.status === 'PAID';
+        }).reduce((acc, s) => acc + (s.paid_amount || 0), 0);
+      data.push({ name: d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }), vendas: daySales });
+    }
+    return data;
   }, [sales]);
 
+  const todayDate = new Date().getDate();
+
   return (
-    <div className="animate-fade-in space-y-8">
-      
-      {/* 1. Header & Quick Actions */}
-      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6">
-        <div>
-            <h1 className="text-3xl font-bold text-white mb-1">
-                Olá, Admin <span className="text-2xl">👋</span>
-            </h1>
-            <p className="text-zinc-400 text-sm">
-                {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-            </p>
-        </div>
-        
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full xl:w-auto">
-            <QuickAction icon={ICONS.Plus} label="Nova Venda" onClick={() => navigate('/sales/new')} highlight={true} />
-            <QuickAction icon={ICONS.Clients} label="Novo Cliente" onClick={() => navigate('/clients')} />
-            <QuickAction icon={ICONS.Inventory} label="Add Produto" onClick={() => navigate('/inventory')} />
-            <QuickAction icon={ICONS.Sales} label="Malinhas" onClick={() => navigate('/sales/history')} />
-        </div>
+    <div className="pb-20 p-6 animate-fade-in">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-white mb-2">Visão Geral</h1>
+        <p className="text-zinc-400">Resumo da sua loja hoje.</p>
       </div>
 
-      {/* 2. KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-        <StatCard 
-            title="Vendas (Mês)" 
-            value={`R$ ${metrics.monthlySales.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} 
-            icon={ICONS.Trending}
-            trend={12}
-            colorClass="text-white"
-        />
-        <StatCard 
-            title="A Receber (Dívidas)" 
-            value={`R$ ${metrics.totalDebt.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} 
-            icon={ICONS.Alert}
-            subtext={`${overdueClients.length} clientes pendentes`}
-            colorClass="text-brand-500"
-        />
-        <StatCard 
-            title="Valor em Estoque" 
-            value={`R$ ${metrics.totalInventory.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}`} 
-            icon={ICONS.Inventory}
-            colorClass="text-white"
-        />
-        <StatCard 
-            title="Malinhas Ativas" 
-            value={metrics.activeBags} 
-            icon={ICONS.Sales}
-            subtext="Toque para ver lista"
-            colorClass="text-purple-400"
-            onClick={() => setIsBagsModalOpen(true)}
-        />
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <StatCard title="Faturamento" value={`R$ ${summary.totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} icon={DollarSign} color="text-green-500" to="/reports" />
+        <StatCard title="A Receber" value={`R$ ${summary.pendingSales.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} icon={Wallet} color="text-orange-500" to="/clients" />
+        <StatCard title="Lucro Líquido" value={`R$ ${summary.profit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} icon={TrendingUp} color="text-blue-500" to="/reports" />
+        <StatCard title="Estoque (Qtd)" value={summary.totalStock} icon={Package} color="text-purple-500" to="/inventory" />
       </div>
 
-      {/* 3. Main Grid Layout */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-          
-          {/* LEFT COLUMN: Charts & Activity */}
-          <div className="xl:col-span-2 space-y-6">
-             
-             {/* Chart */}
-             <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-                <div className="flex justify-between items-center mb-6">
-                    <h3 className="font-bold text-white flex items-center gap-2">
-                        <ICONS.Trending size={20} className="text-zinc-500" />
-                        Fluxo Financeiro
-                    </h3>
-                    <select className="bg-zinc-950 border border-zinc-800 text-xs rounded-lg px-2 py-1 text-zinc-400 focus:outline-none">
-                        <option>Últimos 7 dias</option>
-                    </select>
-                </div>
-                <div className="h-[300px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={getChartData()}>
-                        <defs>
-                        <linearGradient id="colorVendas" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#dc2626" stopOpacity={0.3}/>
-                            <stop offset="95%" stopColor="#dc2626" stopOpacity={0}/>
-                        </linearGradient>
-                        <linearGradient id="colorReceber" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#3f3f46" stopOpacity={0.3}/>
-                            <stop offset="95%" stopColor="#3f3f46" stopOpacity={0}/>
-                        </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                        <XAxis dataKey="name" stroke="#52525b" fontSize={12} tickLine={false} axisLine={false} />
-                        <YAxis stroke="#52525b" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `R$${value}`} />
-                        <Tooltip 
-                            contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', borderRadius: '12px', color: '#fff' }} 
-                            itemStyle={{ color: '#fff' }}
-                        />
-                        <Area type="monotone" dataKey="vendas" stroke="#dc2626" strokeWidth={3} fillOpacity={1} fill="url(#colorVendas)" name="Vendas" />
-                        <Area type="monotone" dataKey="receber" stroke="#71717a" strokeWidth={3} fillOpacity={1} fill="url(#colorReceber)" name="A Receber" />
-                    </AreaChart>
-                    </ResponsiveContainer>
-                </div>
-             </div>
-
-             {/* Recent Activity */}
-             <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-                <div className="flex justify-between items-center mb-6">
-                    <h3 className="font-bold text-white">Últimas Movimentações</h3>
-                    <button onClick={() => navigate('/sales/history')} className="text-xs text-brand-500 hover:text-brand-400 font-medium">Ver tudo</button>
-                </div>
-                <div className="space-y-4">
-                    {sales.slice(0, 4).map((sale) => (
-                        <div key={sale.id} className="flex items-center justify-between p-3 hover:bg-zinc-950/50 rounded-xl transition-colors border border-transparent hover:border-zinc-800 cursor-pointer">
-                            <div className="flex items-center gap-4">
-                                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg ${sale.type === 'BAG' ? 'bg-purple-500/10 text-purple-500' : 'bg-green-500/10 text-green-500'}`}>
-                                    {sale.type === 'BAG' ? <ICONS.Sales size={18} /> : <ICONS.Money size={18} />}
-                                </div>
-                                <div>
-                                    <p className="text-sm font-bold text-white">{sale.client_name}</p>
-                                    <p className="text-xs text-zinc-500">
-                                        {sale.type === 'BAG' ? 'Levou condicional' : 'Compra realizada'} • {new Date(sale.created_at).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}
-                                    </p>
-                                </div>
-                            </div>
-                            <div className="text-right">
-                                <p className={`text-sm font-bold ${sale.type === 'BAG' ? 'text-zinc-300' : 'text-white'}`}>
-                                    R$ {sale.total_amount.toFixed(2)}
-                                </p>
-                                <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${sale.status === 'PAID' ? 'bg-green-500/10 text-green-500' : 'bg-yellow-500/10 text-yellow-500'}`}>
-                                    {sale.status === 'PAID' ? 'Pago' : 'Pendente'}
-                                </span>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-             </div>
-
-          </div>
-
-          {/* RIGHT COLUMN: Notifications & Alerts */}
-          <div className="space-y-6">
-            
-            {/* Birthdays - Special Card */}
-            <div className="bg-gradient-to-br from-brand-900/40 to-zinc-900 border border-brand-900/30 rounded-2xl p-6 relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-4 opacity-10">
-                    <ICONS.Gift size={100} className="text-brand-500" />
-                </div>
-                <h3 className="font-bold text-white flex items-center gap-2 mb-4 relative z-10">
-                    <ICONS.Gift className="text-brand-500" /> Aniversariantes do Dia
-                </h3>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Gráfico */}
+        <div className="lg:col-span-2 bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
+          <h3 className="font-bold text-white mb-4">Vendas da Semana</h3>
+          <div className="h-[300px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData}>
+                <defs>
+                    <linearGradient id="colorVendas" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                    </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                <XAxis dataKey="name" stroke="#52525b" fontSize={12} tickLine={false} axisLine={false} />
+                <YAxis stroke="#52525b" fontSize={12} tickLine={false} axisLine={false} />
                 
-                {birthdays.length > 0 ? (
-                    <div className="space-y-3 relative z-10">
-                        {birthdays.map(client => (
-                            <div key={client.id} className="bg-zinc-950/80 backdrop-blur-sm p-3 rounded-xl border border-zinc-800/50 flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <img src={client.image_url} alt="" className="w-8 h-8 rounded-full bg-zinc-800 object-cover" />
-                                    <span className="text-sm font-medium text-white">{client.name}</span>
-                                </div>
-                                <button 
-                                    onClick={() => openWhatsApp(client.whatsapp, `Parabéns ${client.name}! Temos um presente especial para você na R Store hoje! 🎁`)}
-                                    className="p-2 bg-brand-600 hover:bg-brand-500 text-white rounded-lg transition-colors shadow-lg shadow-brand-900/20"
-                                >
-                                    <ICONS.WhatsApp size={16} />
-                                </button>
-                            </div>
-                        ))}
-                    </div>
-                ) : (
-                    <div className="text-center py-6 relative z-10">
-                        <p className="text-zinc-400 text-sm">Nenhum aniversariante hoje.</p>
-                    </div>
-                )}
-            </div>
-
-            {/* Overdue Payments */}
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-                <div className="flex justify-between items-center mb-4">
-                     <h3 className="font-bold text-white text-sm flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                        Pagamentos Pendentes
-                     </h3>
-                     <span className="text-xs text-zinc-500">{metrics.totalDebt > 0 ? 'Ação necessária' : 'Tudo certo'}</span>
-                </div>
-                {overdueClients.length > 0 ? (
-                    <div className="space-y-3">
-                        {overdueClients.map(client => (
-                            <div key={client.id} className="flex items-center justify-between p-3 bg-zinc-950 rounded-xl border border-zinc-800">
-                                <div>
-                                    <p className="text-sm font-bold text-white">{client.name}</p>
-                                    <p className="text-xs text-red-400 font-medium">Deve R$ {client.current_debt.toFixed(2)}</p>
-                                </div>
-                                <button 
-                                    onClick={() => openWhatsApp(client.whatsapp, `Olá ${client.name}, tudo bem? Consta um pendência de R$ {client.current_debt.toFixed(2)} na R Store. Podemos agendar o pagamento?`)}
-                                    className="text-xs text-zinc-400 hover:text-white border border-zinc-700 hover:bg-zinc-800 px-3 py-1.5 rounded-lg transition-colors"
-                                >
-                                    Cobrar
-                                </button>
-                            </div>
-                        ))}
-                        <button onClick={() => navigate('/clients')} className="w-full text-center text-xs text-zinc-500 hover:text-white mt-2 py-2">
-                            Ver todos os devedores
-                        </button>
-                    </div>
-                ) : (
-                    <div className="text-center py-8 text-zinc-500 text-sm bg-zinc-950 rounded-xl border border-zinc-800 border-dashed">
-                        <ICONS.Check className="mx-auto mb-2 text-green-500" />
-                        Todos os pagamentos em dia!
-                    </div>
-                )}
-            </div>
-
-            {/* Low Stock Alert */}
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-                <h3 className="font-bold text-white text-sm mb-4 flex items-center gap-2">
-                    <ICONS.Alert className="text-yellow-500" size={16} /> Estoque Baixo
-                </h3>
-                {lowStock.length > 0 ? (
-                    <div className="space-y-2">
-                        {lowStock.map(p => (
-                             <div key={p.id} className="flex justify-between items-center text-sm p-2 hover:bg-zinc-950 rounded-lg transition-colors">
-                                <span className="text-zinc-300 truncate max-w-[150px]">{p.name}</span>
-                                <span className="text-yellow-500 font-bold bg-yellow-500/10 px-2 py-0.5 rounded text-xs">
-                                    Restam {p.stock_quantity}
-                                </span>
-                             </div>
-                        ))}
-                         <button onClick={() => navigate('/inventory')} className="w-full text-center text-xs text-zinc-500 hover:text-white mt-2 pt-2 border-t border-zinc-800">
-                            Gerenciar Estoque
-                        </button>
-                    </div>
-                ) : (
-                    <p className="text-xs text-zinc-500">Níveis de estoque saudáveis.</p>
-                )}
-            </div>
-
+                {/* --- CORREÇÃO DO TOOLTIP AQUI --- */}
+                <Tooltip 
+                    contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', color: '#fff', borderRadius: '8px' }}
+                    formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 'Vendas']}
+                />
+                
+                <Area type="monotone" dataKey="vendas" stroke="#10b981" fill="url(#colorVendas)" />
+              </AreaChart>
+            </ResponsiveContainer>
           </div>
-      </div>
+        </div>
 
-      {/* ACTIVE BAGS MODAL */}
-      {isBagsModalOpen && (
-         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
-            <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl w-full max-w-md shadow-2xl relative">
-                <button 
-                    onClick={() => setIsBagsModalOpen(false)}
-                    className="absolute top-4 right-4 text-zinc-500 hover:text-white"
-                >
-                    <ICONS.Close size={24} />
-                </button>
-                <div className="flex items-center gap-3 mb-6">
-                    <div className="p-3 bg-purple-500/10 rounded-xl border border-purple-500/20 text-purple-500">
-                        <ICONS.Sales size={24} />
-                    </div>
-                    <div>
-                        <h3 className="text-xl font-bold text-white">Malinhas Ativas</h3>
-                        <p className="text-sm text-zinc-400">Clientes com condicionais em aberto</p>
-                    </div>
-                </div>
+        {/* Aniversariantes & Recentes */}
+        <div className="flex flex-col gap-6">
+            
+            {/* CARD ANIVERSARIANTES */}
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 flex flex-col max-h-[300px]">
+                <h3 className="font-bold text-white mb-4 flex items-center gap-2">
+                    <Gift size={20} className="text-pink-500" />
+                    Aniversariantes (Semana)
+                </h3>
+                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 pr-1">
+                    {birthdays.length > 0 ? birthdays.map(client => {
+                        const day = parseInt(client.birthDate?.split('-')[2] || '0');
+                        const isToday = day === todayDate;
 
-                <div className="space-y-3 max-h-[60vh] overflow-y-auto custom-scrollbar pr-2">
-                    {activeBagsList.length > 0 ? (
-                        activeBagsList.map(sale => (
-                            <div key={sale.id} className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 flex justify-between items-center group hover:border-purple-500/30 transition-colors">
+                        return (
+                            <div key={client.id} className={`flex justify-between items-center p-3 rounded-xl border transition-all ${isToday ? 'bg-pink-600/20 border-pink-500' : 'bg-zinc-950 border-zinc-800'}`}>
                                 <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center font-bold text-white text-sm">
-                                        {sale.client_name?.charAt(0)}
+                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${isToday ? 'bg-pink-500 text-white animate-pulse' : 'bg-zinc-800 text-zinc-400'}`}>
+                                        {day}
                                     </div>
-                                    <div>
-                                        <p className="text-sm font-bold text-white">{sale.client_name}</p>
-                                        <p className="text-xs text-zinc-500">
-                                            {new Date(sale.created_at).toLocaleDateString('pt-BR')} • {new Date(sale.created_at).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}
-                                        </p>
+                                    <div className="overflow-hidden">
+                                        <p className={`font-bold text-sm truncate max-w-[100px] ${isToday ? 'text-white' : 'text-zinc-300'}`}>{client.name}</p>
+                                        {isToday && <p className="text-[10px] text-pink-400 font-bold uppercase">É Hoje!</p>}
                                     </div>
                                 </div>
-                                <div className="text-right">
-                                    <p className="text-sm font-bold text-purple-400">R$ {sale.total_amount.toFixed(2)}</p>
-                                    <span className="text-[10px] bg-yellow-500/10 text-yellow-500 px-1.5 py-0.5 rounded border border-yellow-500/20">
-                                        Pendente
-                                    </span>
-                                </div>
+                                <button 
+                                    onClick={() => openBirthdayChat(client.phone, client.name)}
+                                    className="p-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors shadow-lg"
+                                    title="Mandar Parabéns"
+                                >
+                                    <MessageCircle size={16} />
+                                </button>
                             </div>
-                        ))
-                    ) : (
-                        <div className="text-center py-8 text-zinc-500">
-                            <ICONS.Check size={32} className="mx-auto mb-2 text-zinc-700" />
-                            <p>Nenhuma malinha ativa no momento.</p>
+                        )
+                    }) : (
+                        <div className="flex flex-col items-center justify-center h-full text-zinc-500 opacity-50">
+                            <Gift size={40} className="mb-2" />
+                            <p className="text-xs">Nenhum aniversariante.</p>
                         </div>
                     )}
                 </div>
-                
-                <div className="mt-6 pt-4 border-t border-zinc-800">
-                    <button 
-                        onClick={() => navigate('/sales/history')}
-                        className="w-full py-3 bg-zinc-800 hover:bg-zinc-700 text-white font-medium rounded-xl transition-colors flex items-center justify-center gap-2"
-                    >
-                        <span>Gerenciar no Histórico</span>
-                        <ICONS.ArrowRight size={16} />
-                    </button>
+            </div>
+
+            {/* Recentes */}
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 flex-1">
+                <h3 className="font-bold text-white mb-4 flex items-center gap-2">
+                    <History size={20} className="text-zinc-400" /> Vendas Recentes
+                </h3>
+                <div className="space-y-4 max-h-[200px] overflow-y-auto custom-scrollbar">
+                    {(sales || []).slice(0, 3).map(sale => (
+                    <div key={sale.id} className="flex justify-between items-center p-3 bg-zinc-950 rounded-xl border border-zinc-800">
+                        <div>
+                        <p className="text-white font-bold text-sm truncate max-w-[120px]">{sale.client_name}</p>
+                        <p className="text-xs text-zinc-500">{new Date(sale.created_at).toLocaleDateString('pt-BR')}</p>
+                        </div>
+                        <div className="text-right">
+                        <p className="text-white font-bold text-sm">R$ {(sale.total_amount || 0).toFixed(2)}</p>
+                        <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded ${sale.status === 'PAID' ? 'text-green-500 bg-green-500/10' : 'text-orange-500 bg-orange-500/10'}`}>
+                            {sale.status === 'PAID' ? 'PAGO' : 'PENDENTE'}
+                        </span>
+                        </div>
+                    </div>
+                    ))}
                 </div>
             </div>
-         </div>
-      )}
+        </div>
+      </div>
     </div>
   );
 };

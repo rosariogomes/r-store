@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Client, Product, Sale, SaleStatus, StoreConfig, Expense, CashRegisterSession, CashRegisterMovement } from '../types';
 import { supabase } from '../lib/supabase'; 
 
+// --- Atualização nas Interfaces ---
 interface StoreContextData {
   clients: Client[];
   products: Product[];
@@ -39,6 +40,7 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [cashSession, setCashSession] = useState<CashRegisterSession | null>(null);
 
+  // Configuração Inicial com as Mensagens Padrão
   const [storeConfig, setStoreConfig] = useState<StoreConfig>({
     name: 'R Store',
     subtitle: 'Luxury Fashion Management',
@@ -46,7 +48,10 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
     cnpj: '00.000.000/0001-00',
     phone: '(82) 99999-9999',
     receiptFooter: 'Trocas somente com etiqueta no prazo de 7 dias.',
-    logo_url: ''
+    logo_url: '',
+    // Novas Configurações de Mensagem
+    birthday_message: 'Olá {nome}! 🎉 Parabéns pelo seu dia! A R Store deseja muitas felicidades. Venha nos visitar e ganhe um desconto especial de aniversário!',
+    promo_message: 'Olá {nome}! A R Store está com novidades incríveis que combinam com você. Venha conferir nossa nova coleção! 🛍️'
   });
 
   useEffect(() => {
@@ -55,13 +60,23 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
     const storedConfig = localStorage.getItem('rstore_config');
     if (storedConfig) setStoreConfig(JSON.parse(storedConfig));
     
-    // Carregar dados iniciais
-    fetchData();
-  }, []);
+    if (storedAuth === 'true') {
+        fetchData();
+    }
+  }, [isAuthenticated]);
 
   const fetchData = async () => {
+    // --- MAPIAMENTO DE CAMPOS (birth_date -> birthDate) ---
     const { data: cData } = await supabase.from('clients').select('*');
-    if (cData) setClients(cData);
+    if (cData) {
+        const mappedClients = cData.map((c: any) => ({
+            ...c,
+            phone: c.whatsapp || c.phone || '', 
+            // Mapeia o campo do banco (birth_date) para o do sistema (birthDate)
+            birthDate: c.birth_date || '' 
+        }));
+        setClients(mappedClients);
+    }
 
     const { data: pData } = await supabase.from('products').select('*');
     if (pData) setProducts(pData);
@@ -76,11 +91,14 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
   const login = () => {
     setIsAuthenticated(true);
     localStorage.setItem('rstore_auth', 'true');
+    fetchData();
   };
 
   const logout = () => {
     setIsAuthenticated(false);
     localStorage.removeItem('rstore_auth');
+    setClients([]);
+    setSales([]);
   };
 
   const updateStoreConfig = (config: StoreConfig) => {
@@ -89,15 +107,47 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
   };
 
   const addClient = async (client: Client) => {
-    const { id, ...clientData } = client; 
-    const { data, error } = await supabase.from('clients').insert([clientData]).select();
-    if (data) setClients(prev => [data[0], ...prev]);
-    if (error) console.error("Erro ao adicionar cliente:", error);
+    const payload = {
+        name: client.name,
+        whatsapp: client.phone,
+        address: client.address,
+        birth_date: client.birthDate, // Envia como birth_date para o banco
+        current_debt: 0
+    };
+
+    const { data, error } = await supabase.from('clients').insert([payload]).select();
+    
+    if (error) {
+        console.error("Erro ao adicionar cliente:", error);
+        alert(`Erro ao salvar: ${error.message}`);
+        return;
+    }
+
+    if (data) {
+        const newLocalClient = { 
+            ...data[0], 
+            phone: data[0].whatsapp,
+            birthDate: data[0].birth_date 
+        };
+        setClients(prev => [newLocalClient, ...prev]);
+    }
   };
 
   const updateClient = async (updatedClient: Client) => {
-    const { error } = await supabase.from('clients').update(updatedClient).eq('id', updatedClient.id);
-    if (!error) setClients(prev => prev.map(c => c.id === updatedClient.id ? updatedClient : c));
+    const payload = {
+        name: updatedClient.name,
+        whatsapp: updatedClient.phone,
+        address: updatedClient.address,
+        birth_date: updatedClient.birthDate // Atualiza data
+    };
+
+    const { error } = await supabase.from('clients').update(payload).eq('id', updatedClient.id);
+    
+    if (!error) {
+        setClients(prev => prev.map(c => c.id === updatedClient.id ? updatedClient : c));
+    } else {
+        console.error("Erro ao atualizar cliente:", error);
+    }
   };
 
   const deleteClient = async (id: string) => {
@@ -105,6 +155,10 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
     setClients(prev => prev.filter(c => c.id !== id));
   };
 
+  // ... (O restante das funções addProduct, updateProduct, deleteProduct, addSale, etc. permanecem iguais ao arquivo anterior)
+  // Vou omitir aqui para não ficar gigante, mas mantenha as funções que você já tinha no arquivo anterior
+  // Certifique-se apenas de que addProduct, updateProduct, etc estão aqui.
+  
   const addProduct = async (product: Product) => {
     const { id, ...prodData } = product;
     const { data } = await supabase.from('products').insert([prodData]).select();
@@ -121,52 +175,28 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
     setProducts(prev => prev.filter(p => p.id !== id));
   };
 
-  // --- CORREÇÃO AQUI NA FUNÇÃO ADD SALE ---
   const addSale = async (newSale: Sale, items: any[]) => {
-    // 1. Separamos o ID falso e o paymentMethod (que está em camelCase)
     const { id: fakeId, paymentMethod, ...restOfSale } = newSale;
-    
-    // 2. Criamos o objeto pronto para o Banco (traduzindo para snake_case)
-    const salePayload = {
-        ...restOfSale,
-        items: items,
-        payment_method: paymentMethod // <--- AQUI ESTAVA O ERRO (Mapeamos camelCase para snake_case)
-    };
-
+    const salePayload = { ...restOfSale, items: items, payment_method: paymentMethod };
     const { data: saleRes, error } = await supabase.from('sales').insert([salePayload]).select();
 
-    if (error) {
-        console.error("Erro Supabase:", error); // Log detalhado no console
-        alert(`Erro ao salvar venda: ${error.message}`);
-        return;
-    }
+    if (error) { console.error("Erro Supabase:", error); alert(`Erro ao salvar venda: ${error.message}`); return; }
     
-    // Atualiza estado local
     const savedSale = saleRes[0];
-    // Convertemos de volta para o formato do Frontend para não quebrar a tela atual
-    const savedSaleFrontend: Sale = {
-        ...savedSale,
-        paymentMethod: savedSale.payment_method
-    };
-    
+    const savedSaleFrontend: Sale = { ...savedSale, paymentMethod: savedSale.payment_method };
     setSales(prev => [savedSaleFrontend, ...prev]);
 
-    // Atualiza estoque dos produtos
     items.forEach(async (item) => {
         const prod = products.find(p => p.id === item.id);
         if (prod) {
             let updates = {};
-            if (newSale.type === 'SALE') {
-                updates = { stock_quantity: Math.max(0, prod.stock_quantity - item.cartQuantity) };
-            } else {
-                updates = { on_bag_quantity: prod.on_bag_quantity + item.cartQuantity };
-            }
+            if (newSale.type === 'SALE') { updates = { stock_quantity: Math.max(0, prod.stock_quantity - item.cartQuantity) }; } 
+            else { updates = { on_bag_quantity: prod.on_bag_quantity + item.cartQuantity }; }
             await supabase.from('products').update(updates).eq('id', prod.id);
             setProducts(prev => prev.map(p => p.id === prod.id ? { ...p, ...updates } : p));
         }
     });
 
-    // Atualiza dívida do cliente se houver pendência
     const debtToAdd = newSale.total_amount - newSale.paid_amount;
     if (debtToAdd > 0) {
         const client = clients.find(c => c.id === newSale.client_id);
@@ -177,7 +207,6 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
         }
     }
     
-    // Lança no caixa se houve pagamento
     if (newSale.paid_amount > 0 && cashSession?.status === 'OPEN') {
         addCashMovement('SALE', newSale.paid_amount, `Venda - ${newSale.client_name}`);
     }
@@ -186,14 +215,8 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
   const updateSaleStatus = async (saleId: string, amountPaidNow: number, newStatus: SaleStatus) => {
     const sale = sales.find(s => s.id === saleId);
     if (!sale) return;
-    
     const newPaidAmount = (sale.paid_amount || 0) + amountPaidNow;
-    
-    await supabase.from('sales').update({ 
-        paid_amount: newPaidAmount, 
-        status: newStatus 
-    }).eq('id', saleId);
-    
+    await supabase.from('sales').update({ paid_amount: newPaidAmount, status: newStatus }).eq('id', saleId);
     setSales(prev => prev.map(s => s.id === saleId ? { ...s, paid_amount: newPaidAmount, status: newStatus } : s));
 
     const client = clients.find(c => c.id === sale.client_id);
@@ -202,7 +225,6 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
         await supabase.from('clients').update({ current_debt: newDebt }).eq('id', client.id);
         setClients(prev => prev.map(c => c.id === client.id ? { ...c, current_debt: newDebt } : c));
     }
-
     if (amountPaidNow > 0 && cashSession?.status === 'OPEN') {
         addCashMovement('RECEIPT', amountPaidNow, `Recebimento Dívida - ${sale.client_name}`);
     }
@@ -211,7 +233,6 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
   const confirmBag = async (saleId: string, keptItems: { [productId: string]: number }) => {
     const sale = sales.find(s => s.id === saleId);
     if (!sale) return;
-
     let newTotalAmount = 0;
     const newItemsList = sale.items.map(item => {
         const keptQty = keptItems[item.product_id] || 0;
@@ -220,12 +241,8 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
     }).filter(i => i.quantity > 0);
 
     await supabase.from('sales').update({
-        total_amount: newTotalAmount,
-        items: newItemsList, 
-        status: newTotalAmount === 0 ? 'PAID' : 'PENDING',
-        type: 'SALE'
+        total_amount: newTotalAmount, items: newItemsList, status: newTotalAmount === 0 ? 'PAID' : 'PENDING', type: 'SALE'
     }).eq('id', saleId);
-    
     fetchData(); 
   };
 
@@ -242,53 +259,26 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
 
   const openCashRegister = (initialAmount: number) => {
     const newSession: CashRegisterSession = {
-        id: Date.now().toString(),
-        status: 'OPEN',
-        opening_balance: initialAmount,
-        current_balance: initialAmount,
-        opened_at: new Date().toISOString(),
-        movements: [{
-            id: 'init',
-            type: 'OPENING',
-            amount: initialAmount,
-            description: 'Abertura de Caixa',
-            timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-            method: 'CASH'
-        }]
+        id: Date.now().toString(), status: 'OPEN', opening_balance: initialAmount, current_balance: initialAmount, opened_at: new Date().toISOString(),
+        movements: [{ id: 'init', type: 'OPENING', amount: initialAmount, description: 'Abertura de Caixa', timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }), method: 'CASH' }]
     };
     setCashSession(newSession);
   };
 
   const closeCashRegister = () => {
-    if (cashSession) {
-        setCashSession({ ...cashSession, status: 'CLOSED', closed_at: new Date().toISOString() });
-    }
+    if (cashSession) { setCashSession({ ...cashSession, status: 'CLOSED', closed_at: new Date().toISOString() }); }
   };
 
   const addCashMovement = async (type: CashRegisterMovement['type'], amount: number, description: string, method: string = 'CASH') => {
     if (!cashSession || cashSession.status !== 'OPEN') return;
-
     const newMovement: CashRegisterMovement = {
-        id: Date.now().toString(),
-        type,
-        amount,
-        description,
-        timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-        method
+        id: Date.now().toString(), type, amount, description, timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }), method
     };
-
     setCashSession(prev => {
         if (!prev) return null;
-        return {
-            ...prev,
-            current_balance: prev.current_balance + amount,
-            movements: [newMovement, ...prev.movements]
-        };
+        return { ...prev, current_balance: prev.current_balance + amount, movements: [newMovement, ...prev.movements] };
     });
-    
-    await supabase.from('cash_movements').insert([{
-        type, amount, description, method, timestamp: new Date().toISOString()
-    }]);
+    await supabase.from('cash_movements').insert([{ type, amount, description, method, timestamp: new Date().toISOString() }]);
   };
 
   return (
