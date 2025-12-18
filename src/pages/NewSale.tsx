@@ -1,10 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { 
   Search, Plus, X, ArrowRight, Star, ShoppingBag, Banknote, 
-  Package, Users, AlertTriangle, Check, CreditCard 
+  Package, Users, AlertTriangle, Check
 } from 'lucide-react';
-import { Client, Product, Sale, SaleItem } from '../types';
+import { Client, Product, Sale } from '../types';
 import { useStore } from '../context/StoreContext';
+import { useNavigate } from 'react-router-dom';
 
 // Interface estendida para itens no carrinho
 interface CartItem extends Product {
@@ -13,6 +14,7 @@ interface CartItem extends Product {
 
 export const NewSale = () => {
   const { clients, products, sales, addClient, addSale } = useStore(); 
+  const navigate = useNavigate();
 
   // -- Estados Globais --
   const [step, setStep] = useState<1 | 2>(1);
@@ -47,7 +49,6 @@ export const NewSale = () => {
 
   const clientHistory = useMemo(() => {
     if (!selectedClient) return [];
-    // Proteção: garante que sales existe antes de filtrar
     return (sales || []).filter(s => s.client_id === selectedClient.id).sort((a, b) => 
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     );
@@ -62,7 +63,6 @@ export const NewSale = () => {
     setCart(prev => {
       const existing = prev.find(item => item.id === product.id);
       
-      // Checa estoque disponível (Total - Reservado em Malinha)
       const availableStock = product.stock_quantity - (product.on_bag_quantity || 0);
       const currentQtyInCart = existing ? existing.cartQuantity : 0;
       
@@ -80,6 +80,7 @@ export const NewSale = () => {
       }
       return [...prev, { ...product, cartQuantity: 1 }];
     });
+    setSearchProduct('');
   };
 
   const updateQuantity = (productId: string, delta: number) => {
@@ -127,7 +128,7 @@ export const NewSale = () => {
   // Ações (Handlers)
   // ------------------------------------------------------------------
 
-  const handleCreateClient = () => {
+  const handleCreateClient = async () => {
     if (!newClientName.trim()) {
       alert('Nome do cliente é obrigatório.');
       return;
@@ -135,78 +136,96 @@ export const NewSale = () => {
     const newClient: Client = {
       id: Date.now().toString(),
       name: newClientName,
-      phone: newClientPhone, // O Contexto vai traduzir para whatsapp
+      phone: newClientPhone,
       whatsapp: newClientPhone,
       address: '',
       trust_score: 3, 
       credit_limit: 500,
       current_debt: 0
     };
-    addClient(newClient); 
+    await addClient(newClient); 
     setSelectedClient(newClient);
     setIsNewClientModalOpen(false);
     setNewClientName('');
     setNewClientPhone('');
   };
 
-  const handleFinish = () => {
+  const handleFinish = async () => {
     if (!selectedClient) return;
+    if (cart.length === 0) return alert("Carrinho vazio!");
 
     setIsProcessing(true);
     
-    setTimeout(() => {
-      // 1. Preparar Itens
-      const saleId = Date.now().toString();
-      const saleItems: SaleItem[] = cart.map(cItem => ({
-          id: `si-${Date.now()}-${cItem.id}`,
-          sale_id: saleId, 
-          product_id: cItem.id,
-          product_name: cItem.name,
-          product_image: cItem.image_url,
-          quantity: cItem.cartQuantity,
-          unit_price: cItem.sale_price,
-          size: cItem.size,
-          color: cItem.color
-      }));
+    // 1. Preparar ID Único da Venda
+    const saleId = crypto.randomUUID(); 
 
-      // 2. Criar Objeto de Venda
-      const newSale: Sale = {
-          id: saleId,
-          client_id: selectedClient.id,
-          client_name: selectedClient.name,
-          total_amount: paymentDetails.finalTotal,
-          paid_amount: saleType === 'SALE' ? paymentDetails.finalTotal : 0, // Venda paga vs Malinha (0 pago)
-          status: saleType === 'SALE' ? 'PAID' : 'PENDING',
-          type: saleType,
-          created_at: new Date().toISOString(),
-          paymentMethod: saleType === 'SALE' ? paymentMethod : undefined,
-          items: saleItems
-      };
+    // 2. Preparar Itens (Vinculando ao sale_id)
+    const saleItems = cart.map(cItem => ({
+        sale_id: saleId, // IMPORTANTE: Vincula o item à venda
+        product_id: cItem.id,
+        product_name: cItem.name,
+        product_image: cItem.image_url,
+        quantity: cItem.cartQuantity,
+        unit_price: cItem.sale_price,
+        size: cItem.size,
+        color: cItem.color
+    }));
 
-      // 3. Executar via Contexto
-      addSale(newSale, cart);
+    // 3. Criar Objeto de Venda
+    const newSale: any = {
+        id: saleId,
+        client_id: selectedClient.id,
+        client_name: selectedClient.name,
+        total_amount: paymentDetails.finalTotal,
+        paid_amount: saleType === 'SALE' ? paymentDetails.finalTotal : 0,
+        status: saleType === 'SALE' ? 'PAID' : 'PENDING',
+        type: saleType,
+        created_at: new Date().toISOString(),
+        payment_method: saleType === 'SALE' ? paymentMethod : null
+    };
 
-      let msg = '';
-      if (saleType === 'SALE') {
-        msg = `Venda realizada!\nTotal: R$ ${paymentDetails.finalTotal.toFixed(2)}\nPagamento: ${paymentMethod}`;
-      } else {
-        msg = `Malinha/Fiado criado para ${selectedClient?.name}!\nValor da Dívida: R$ ${paymentDetails.finalTotal.toFixed(2)}`;
-        if (installments > 1) {
-            msg += `\nParcelamento Acordado: ${installments}x de R$ ${paymentDetails.installmentValue.toFixed(2)}`;
+    try {
+        // Envia para o Contexto salvar no Banco
+        await addSale(newSale, saleItems);
+
+        let msg = '';
+        if (saleType === 'SALE') {
+          msg = `Venda realizada!\nTotal: R$ ${paymentDetails.finalTotal.toFixed(2)}`;
+        } else {
+          msg = `Malinha criada para ${selectedClient?.name}!\nDívida: R$ ${paymentDetails.finalTotal.toFixed(2)}`;
+          if (installments > 1) {
+            msg += `\nParcelamento: ${installments}x de R$ ${paymentDetails.installmentValue.toFixed(2)}`;
+          }
         }
-      }
-      
-      alert(msg);
-      
-      // Resetar Tela
-      setIsProcessing(false);
-      setCart([]);
-      setStep(1);
-      setSelectedClient(null);
-      setInstallments(1);
-      setInterestRate(0);
-      setPaymentMethod('PIX');
-    }, 1000);
+        
+        alert(msg);
+        
+        // Reset Total
+        setCart([]);
+        setStep(1);
+        setSelectedClient(null);
+        setInstallments(1);
+        setInterestRate(0);
+        setPaymentMethod('PIX');
+        
+        navigate('/sales'); // Redireciona para o histórico
+    } catch (error: any) {
+        console.error("Erro ao finalizar venda:", error);
+        
+        // Verifica se o erro foi "Caixa Fechado"
+        if (error.message === "CAIXA_FECHADO") {
+            const irParaCaixa = window.confirm(
+                "⚠️ CAIXA FECHADO!\n\nVocê precisa abrir o caixa do dia antes de realizar vendas.\nDeseja ir para a tela de Abertura de Caixa agora?"
+            );
+            if (irParaCaixa) {
+                navigate('/cash-register');
+            }
+        } else {
+            alert("Erro ao salvar venda: " + (error.message || "Erro desconhecido"));
+        }
+    } finally {
+        setIsProcessing(false);
+    }
   };
 
   // ------------------------------------------------------------------
@@ -229,7 +248,7 @@ export const NewSale = () => {
             </div>
         </div>
         <div className="text-right">
-            <p className="text-sm font-bold text-white">R$ {(sale.total_amount || 0).toFixed(2)}</p>
+            <p className="text-sm font-bold text-white">R$ {(Number(sale.total_amount) || 0).toFixed(2)}</p>
             <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${
                 sale.status === 'PAID' ? 'bg-green-500/10 text-green-500' : 
                 sale.status === 'PENDING' ? 'bg-yellow-500/10 text-yellow-500' : 
@@ -258,7 +277,7 @@ export const NewSale = () => {
                   onClick={() => setStep(1)} 
                   className="p-2 bg-zinc-900 border border-zinc-800 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
                 >
-                   <ArrowRight size={20} className="rotate-180" /> {/* Voltar */}
+                   <ArrowRight size={20} className="rotate-180" />
                 </button>
                 <div>
                    <h1 className="text-2xl font-bold text-white flex items-center gap-2">
@@ -288,7 +307,7 @@ export const NewSale = () => {
             {/* LEFT: Client List */}
             <div className={`flex flex-col bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden transition-all ${selectedClient ? 'hidden lg:flex lg:col-span-4' : 'col-span-12'}`}>
                 <div className="p-4 border-b border-zinc-800 bg-zinc-900/50 space-y-3">
-                     <div className="relative">
+                      <div className="relative">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500" size={20} />
                         <input 
                             type="text" 
@@ -334,11 +353,10 @@ export const NewSale = () => {
                 </div>
             </div>
 
-            {/* RIGHT: Client Details & History (Professional View) */}
+            {/* RIGHT: Client Details & History */}
             <div className={`bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden flex flex-col ${selectedClient ? 'col-span-12 lg:col-span-8 flex' : 'hidden lg:flex lg:col-span-8 items-center justify-center text-zinc-600'}`}>
                 {selectedClient ? (
                     <>
-                        {/* Header Profile */}
                         <div className="p-6 border-b border-zinc-800 bg-zinc-900 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                              <div className="flex items-center gap-4">
                                  <div className="w-16 h-16 rounded-full bg-zinc-800 border-2 border-zinc-700 overflow-hidden">
@@ -352,18 +370,12 @@ export const NewSale = () => {
                                      <h2 className="text-2xl font-bold text-white">{selectedClient.name}</h2>
                                      <div className="flex items-center gap-3 text-sm text-zinc-400 mt-1">
                                          <span>{selectedClient.whatsapp || selectedClient.phone}</span>
-                                         <span>•</span>
-                                         <div className="flex gap-0.5">
-                                             {[...Array(5)].map((_, i) => (
-                                                 <Star key={i} size={12} className={i < (selectedClient.trust_score || 3) ? "fill-yellow-500 text-yellow-500" : "text-zinc-700"} />
-                                             ))}
-                                         </div>
                                      </div>
                                  </div>
                              </div>
                              <div className="flex gap-2 w-full sm:w-auto">
                                  <button 
-                                    onClick={() => setSelectedClient(null)} // Back on mobile
+                                    onClick={() => setSelectedClient(null)} 
                                     className="lg:hidden p-3 bg-zinc-800 rounded-xl text-white"
                                  >
                                     <X size={20} />
@@ -378,11 +390,10 @@ export const NewSale = () => {
                              </div>
                         </div>
 
-                        {/* Stats Row */}
                         <div className="grid grid-cols-3 gap-1 p-4 bg-zinc-950/30 border-b border-zinc-800">
                              <div className="text-center border-r border-zinc-800 last:border-0">
                                  <p className="text-xs text-zinc-500 uppercase font-bold mb-1">Total Gasto</p>
-                                 <p className="text-white font-bold">R$ {clientHistory.reduce((acc, s) => acc + (s.total_amount || 0), 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+                                 <p className="text-white font-bold">R$ {clientHistory.reduce((acc, s) => acc + (Number(s.total_amount) || 0), 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
                              </div>
                              <div className="text-center border-r border-zinc-800 last:border-0">
                                  <p className="text-xs text-zinc-500 uppercase font-bold mb-1">Última Compra</p>
@@ -396,7 +407,6 @@ export const NewSale = () => {
                              </div>
                         </div>
 
-                        {/* History List */}
                         <div className="flex-1 overflow-hidden flex flex-col bg-zinc-900/50">
                             <div className="p-4 flex items-center gap-2">
                                 <ShoppingBag size={18} className="text-zinc-500" />
@@ -454,7 +464,6 @@ export const NewSale = () => {
                     <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
                         {filteredProducts.map(product => {
                             const inCart = cart.find(i => i.id === product.id)?.cartQuantity || 0;
-                            // Calculate REAL availability
                             const available = (product.stock_quantity - (product.on_bag_quantity || 0)) - inCart;
                             const isOOS = available <= 0;
 
@@ -471,18 +480,13 @@ export const NewSale = () => {
                                 >
                                     <div className="aspect-[3/4] w-full bg-zinc-900 relative">
                                         {product.image_url ? (
-                                             <img src={product.image_url} alt={product.name} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
+                                                <img src={product.image_url} alt={product.name} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
                                         ) : (
-                                            <div className="w-full h-full flex items-center justify-center"><Package className="text-zinc-700"/></div>
+                                                <div className="w-full h-full flex items-center justify-center"><Package className="text-zinc-700"/></div>
                                         )}
                                         {isOOS && (
                                             <div className="absolute inset-0 bg-black/60 flex items-center justify-center flex-col p-2">
                                                 <span className="text-white font-bold text-xs bg-red-600 px-2 py-1 rounded mb-1">INDISPONÍVEL</span>
-                                                {product.stock_quantity > 0 && product.on_bag_quantity > 0 && (
-                                                   <span className="text-[10px] text-purple-300 bg-purple-900/50 px-1 rounded text-center">
-                                                     {product.on_bag_quantity} em malinha
-                                                   </span>
-                                                )}
                                             </div>
                                         )}
                                         {inCart > 0 && (
@@ -496,10 +500,6 @@ export const NewSale = () => {
                                         <div className="flex justify-between items-center mt-1">
                                             <span className="text-zinc-500 text-xs">{product.size}</span>
                                             <span className="text-brand-500 font-bold text-sm">R$ {product.sale_price}</span>
-                                        </div>
-                                        <div className="mt-2 flex justify-between items-center text-[10px] font-medium">
-                                            <span className="text-zinc-500">Disp: {available}</span>
-                                            {(product.on_bag_quantity || 0) > 0 && <span className="text-purple-400">Malinha: {product.on_bag_quantity}</span>}
                                         </div>
                                     </div>
                                 </button>
