@@ -11,7 +11,7 @@ export interface CashSession {
     opening_balance: number;
     closing_balance?: number;
     calculated_balance?: number;
-    movements?: CashMovement[]; // <--- Adicione esta linha
+    movements?: CashMovement[];
 }
 
 export interface CashMovement {
@@ -25,6 +25,7 @@ export interface CashMovement {
 
 interface StoreContextData {
   user: UserProfile | null;
+  usersList: UserProfile[]; // <--- NOVO: Lista de usuários para o Gestor ver
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, pass: string) => Promise<{error?: string}>;
@@ -43,6 +44,7 @@ interface StoreContextData {
   addCashMovement: (type: 'SUPPLY' | 'BLEED', amount: number, desc: string) => Promise<void>;
   
   updateStoreConfig: (config: StoreConfig) => void;
+  updateUserRole: (targetId: string, newRole: UserRole) => Promise<void>; // <--- NOVO: Função para mudar cargo
   addClient: (client: Client) => Promise<void>;
   updateClient: (client: Client) => Promise<void>;
   deleteClient: (id: string) => Promise<void>;
@@ -61,6 +63,7 @@ const StoreContext = createContext<StoreContextData>({} as StoreContextData);
 
 export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
+  const [usersList, setUsersList] = useState<UserProfile[]>([]); // <--- Estado novo
   const [isLoading, setIsLoading] = useState(true);
   
   const [clients, setClients] = useState<Client[]>([]);
@@ -116,7 +119,7 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
     // Busca caixa OPEN e já traz as movements (movimentações) juntas
     const { data } = await supabase
       .from('cash_register_sessions')
-      .select('*, movements:cash_register_movements(*)') // O segredo está aqui
+      .select('*, movements:cash_register_movements(*)') 
       .eq('status', 'OPEN')
       .maybeSingle();
     
@@ -140,6 +143,11 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
 
         const { data: eData } = await supabase.from('expenses').select('*').order('created_at', { ascending: false });
         if (eData) setExpenses(eData);
+
+        // --- NOVO: Busca lista de usuários para Gestão ---
+        const { data: uData } = await supabase.from('profiles').select('*').order('name');
+        if (uData) setUsersList(uData as UserProfile[]);
+
     } catch (e) {
         console.error("Erro ao carregar dados:", e);
     }
@@ -154,7 +162,7 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
           opening_balance: amount,
           status: 'OPEN',
           opened_at: new Date().toISOString()
-      }]).select().single();
+      }]).select('*, movements:cash_register_movements(*)').single(); // Traz movements vazio para não quebrar a UI
 
       if (error) {
           alert("Erro ao abrir caixa");
@@ -191,7 +199,7 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
         description: desc
     }]);
     
-    await fetchCashSession(); // <--- Adicione isso para atualizar a tela na hora
+    await fetchCashSession(); 
 };
 
   // --- Auth ---
@@ -237,6 +245,21 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
   // --- CRUD Actions ---
   const updateStoreConfig = (cfg: StoreConfig) => { if (!canManageUsers()) return alert("Apenas Gestores."); setStoreConfig(cfg); };
   
+  // --- NOVO: Função para alterar cargo ---
+  const updateUserRole = async (targetId: string, newRole: UserRole) => {
+    if (user?.role !== 'GESTOR' && user?.role !== 'ADMIN') return alert("Sem permissão.");
+    
+    const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', targetId);
+    
+    if (error) {
+        alert("Erro ao atualizar permissão.");
+        console.error(error);
+    } else {
+        // Atualiza lista local
+        setUsersList(prev => prev.map(u => u.id === targetId ? { ...u, role: newRole } : u));
+    }
+  };
+
   const addClient = async (c: Client) => { 
       const { data } = await supabase.from('clients').insert([{name: c.name, whatsapp: c.phone, birth_date: c.birthDate, address: c.address, current_debt: 0}]).select();
       if(data) fetchData();
@@ -255,6 +278,7 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
   
   const addProduct = async (p: Product) => { const {id, ...rest} = p; await supabase.from('products').insert([rest]); fetchData(); };
   const updateProduct = async (p: Product) => { await supabase.from('products').update(p).eq('id', p.id); fetchData(); };
+  
   const deleteProduct = async (id: string) => { 
     if (!canDelete()) return alert("Sem permissão.");
     
@@ -264,18 +288,13 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
     // 2. Se tiver imagem, apagamos ela do Storage
     if (product?.image_url) {
         try {
-            // A URL do Supabase geralmente é: .../storage/v1/object/public/products/nome-do-arquivo.jpg
-            // Precisamos extrair apenas o "nome-do-arquivo.jpg" para apagar
             const urlParts = product.image_url.split('/products/');
-            
             if (urlParts.length > 1) {
-                const fileName = urlParts[1]; // Pega a parte final da URL
-                // Remove do bucket 'products'
+                const fileName = urlParts[1];
                 await supabase.storage.from('products').remove([fileName]);
             }
         } catch (err) {
             console.error("Erro ao tentar apagar imagem antiga:", err);
-            // Não impedimos a exclusão do produto se a imagem falhar, mas avisamos no console
         }
     }
 
@@ -288,7 +307,7 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
     } else {
         fetchData(); 
     }
-};
+  };
   
   // VENDA COM BLOQUEIO DE CAIXA
   const addSale = async (sale: Sale, items: any[]) => {
@@ -346,8 +365,8 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
 
   return (
     <StoreContext.Provider value={{
-      user, isAuthenticated: !!user, isLoading,
-      login, logout, register,
+      user, usersList, isAuthenticated: !!user, isLoading,
+      login, logout, register, updateUserRole,
       clients, products, sales, expenses, storeConfig, 
       // Caixa Exports
       cashSession, openCashRegister, closeCashRegister, addCashMovement,
