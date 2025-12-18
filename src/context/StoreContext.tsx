@@ -11,6 +11,7 @@ export interface CashSession {
     opening_balance: number;
     closing_balance?: number;
     calculated_balance?: number;
+    movements?: CashMovement[]; // <--- Adicione esta linha
 }
 
 export interface CashMovement {
@@ -112,19 +113,19 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
   };
 
   const fetchCashSession = async () => {
-      // Busca se existe algum caixa OPEN
-      const { data } = await supabase
-        .from('cash_register_sessions')
-        .select('*')
-        .eq('status', 'OPEN')
-        .maybeSingle(); // maybeSingle não dá erro se não achar nada
-      
-      if (data) {
-          setCashSession(data);
-      } else {
-          setCashSession(null);
-      }
-  };
+    // Busca caixa OPEN e já traz as movements (movimentações) juntas
+    const { data } = await supabase
+      .from('cash_register_sessions')
+      .select('*, movements:cash_register_movements(*)') // O segredo está aqui
+      .eq('status', 'OPEN')
+      .maybeSingle();
+    
+    if (data) {
+        setCashSession(data);
+    } else {
+        setCashSession(null);
+    }
+};
 
   const fetchData = async () => {
     try {
@@ -181,16 +182,17 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
   };
 
   const addCashMovement = async (type: 'SUPPLY' | 'BLEED', amount: number, desc: string) => {
-      if (!cashSession) return alert("Caixa fechado!");
+    if (!cashSession) return alert("Caixa fechado!");
 
-      await supabase.from('cash_register_movements').insert([{
-          session_id: cashSession.id,
-          type,
-          amount,
-          description: desc
-      }]);
-      // Não precisamos atualizar state local complexo, apenas garantir que salvou
-  };
+    await supabase.from('cash_register_movements').insert([{
+        session_id: cashSession.id,
+        type,
+        amount,
+        description: desc
+    }]);
+    
+    await fetchCashSession(); // <--- Adicione isso para atualizar a tela na hora
+};
 
   // --- Auth ---
   const login = async (email: string, pass: string) => {
