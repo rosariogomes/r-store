@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { 
   Search, Plus, X, ArrowRight, Star, ShoppingBag, Banknote, 
-  Package, Users, AlertTriangle, Check
+  Package, Users, AlertTriangle, Check, ChevronLeft, ShoppingCart
 } from 'lucide-react';
 import { Client, Product, Sale } from '../types';
 import { useStore } from '../context/StoreContext';
@@ -19,6 +19,9 @@ export const NewSale = () => {
   // -- Estados Globais --
   const [step, setStep] = useState<1 | 2>(1);
   const [isProcessing, setIsProcessing] = useState(false);
+  
+  // -- Controle de Visualização Mobile (Produtos ou Carrinho) --
+  const [mobileView, setMobileView] = useState<'PRODUCTS' | 'CART'>('PRODUCTS');
 
   // -- Seleção de Cliente --
   const [searchClient, setSearchClient] = useState('');
@@ -156,12 +159,10 @@ export const NewSale = () => {
 
     setIsProcessing(true);
     
-    // 1. Preparar ID Único da Venda
     const saleId = crypto.randomUUID(); 
 
-    // 2. Preparar Itens (Vinculando ao sale_id)
     const saleItems = cart.map(cItem => ({
-        sale_id: saleId, // IMPORTANTE: Vincula o item à venda
+        sale_id: saleId,
         product_id: cItem.id,
         product_name: cItem.name,
         product_image: cItem.image_url,
@@ -171,7 +172,6 @@ export const NewSale = () => {
         color: cItem.color
     }));
 
-    // 3. Criar Objeto de Venda
     const newSale: any = {
         id: saleId,
         client_id: selectedClient.id,
@@ -185,7 +185,6 @@ export const NewSale = () => {
     };
 
     try {
-        // Envia para o Contexto salvar no Banco
         await addSale(newSale, saleItems);
 
         let msg = '';
@@ -200,19 +199,18 @@ export const NewSale = () => {
         
         alert(msg);
         
-        // Reset Total
         setCart([]);
         setStep(1);
         setSelectedClient(null);
         setInstallments(1);
         setInterestRate(0);
         setPaymentMethod('PIX');
+        setMobileView('PRODUCTS'); // Reseta view mobile
         
-        navigate('/sales'); // Redireciona para o histórico
+        navigate('/sales'); 
     } catch (error: any) {
         console.error("Erro ao finalizar venda:", error);
         
-        // Verifica se o erro foi "Caixa Fechado"
         if (error.message === "CAIXA_FECHADO") {
             const irParaCaixa = window.confirm(
                 "⚠️ CAIXA FECHADO!\n\nVocê precisa abrir o caixa do dia antes de realizar vendas.\nDeseja ir para a tela de Abertura de Caixa agora?"
@@ -261,7 +259,7 @@ export const NewSale = () => {
   );
 
   return (
-    <div className="h-[calc(100vh-140px)] md:h-[calc(100vh-100px)] flex flex-col animate-fade-in">
+    <div className="h-[calc(100vh-140px)] md:h-[calc(100vh-100px)] flex flex-col animate-fade-in relative">
       
       {/* Top Bar Navigation */}
       <div className="flex items-center justify-between mb-4 md:mb-6 shrink-0">
@@ -274,26 +272,32 @@ export const NewSale = () => {
            ) : (
              <div className="flex items-center gap-3">
                 <button 
-                  onClick={() => setStep(1)} 
+                  onClick={() => {
+                      if (mobileView === 'CART') {
+                          setMobileView('PRODUCTS');
+                      } else {
+                          setStep(1);
+                      }
+                  }} 
                   className="p-2 bg-zinc-900 border border-zinc-800 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
                 >
-                   <ArrowRight size={20} className="rotate-180" />
+                   <ChevronLeft size={20} />
                 </button>
                 <div>
-                   <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-                     Caixa 
-                     <span className="text-sm font-normal text-zinc-500 bg-zinc-900 px-2 py-0.5 rounded-md border border-zinc-800">
+                   <h1 className="text-xl md:text-2xl font-bold text-white flex items-center gap-2">
+                     {mobileView === 'CART' ? 'Checkout' : 'Catálogo'}
+                     <span className="text-sm font-normal text-zinc-500 bg-zinc-900 px-2 py-0.5 rounded-md border border-zinc-800 hidden md:inline-block">
                         {saleType === 'SALE' ? 'Venda Direta' : 'Malinha / Fiado'}
                      </span>
                    </h1>
-                   <p className="text-zinc-400 text-xs">Atendendo: <span className="text-brand-500 font-bold">{selectedClient?.name}</span></p>
+                   <p className="text-zinc-400 text-xs truncate max-w-[200px]">Cliente: <span className="text-brand-500 font-bold">{selectedClient?.name}</span></p>
                 </div>
              </div>
            )}
         </div>
         
-        {/* Progress Steps */}
-        <div className="flex items-center gap-2">
+        {/* Progress Steps (Desktop Only) */}
+        <div className="hidden md:flex items-center gap-2">
             <span className={`px-3 py-1 rounded-full text-xs font-bold ${step === 1 ? 'bg-brand-600 text-white' : 'bg-zinc-800 text-zinc-500'}`}>1. Cliente</span>
             <div className="w-8 h-[1px] bg-zinc-800" />
             <span className={`px-3 py-1 rounded-full text-xs font-bold ${step === 2 ? 'bg-brand-600 text-white' : 'bg-zinc-800 text-zinc-500'}`}>2. Caixa</span>
@@ -441,17 +445,17 @@ export const NewSale = () => {
 
       {/* STEP 2: POS INTERFACE */}
       {step === 2 && selectedClient && (
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 overflow-hidden">
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 overflow-hidden relative">
             
-            {/* LEFT: PRODUCT CATALOG */}
-            <div className="lg:col-span-2 flex flex-col bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+            {/* LEFT: PRODUCT CATALOG (Escondido no mobile se view == 'CART') */}
+            <div className={`lg:col-span-2 flex flex-col bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden ${mobileView === 'CART' ? 'hidden lg:flex' : 'flex'}`}>
                 {/* Search Bar */}
                 <div className="p-4 border-b border-zinc-800 bg-zinc-900/50">
                     <div className="relative">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500" size={20} />
                         <input 
                             type="text" 
-                            placeholder="Buscar produto por nome, código..." 
+                            placeholder="Buscar produto..." 
                             className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-3 pl-12 pr-4 text-white focus:outline-none focus:border-brand-600"
                             value={searchProduct}
                             onChange={(e) => setSearchProduct(e.target.value)}
@@ -460,7 +464,7 @@ export const NewSale = () => {
                 </div>
 
                 {/* Product Grid */}
-                <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+                <div className="flex-1 overflow-y-auto p-4 custom-scrollbar pb-24 lg:pb-4">
                     <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
                         {filteredProducts.map(product => {
                             const inCart = cart.find(i => i.id === product.id)?.cartQuantity || 0;
@@ -507,10 +511,33 @@ export const NewSale = () => {
                         })}
                     </div>
                 </div>
+
+                {/* BOTÃO FLUTUANTE MOBILE (Só aparece se tiver itens e no mobile) */}
+                {cart.length > 0 && mobileView === 'PRODUCTS' && (
+                    <div className="absolute bottom-4 left-4 right-4 lg:hidden animate-fade-in-up z-20">
+                        <button 
+                            onClick={() => setMobileView('CART')}
+                            className="w-full bg-brand-600 text-white p-4 rounded-2xl shadow-xl flex items-center justify-between"
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className="bg-black/20 w-10 h-10 rounded-full flex items-center justify-center font-bold">
+                                    {totalItems}
+                                </div>
+                                <div className="text-left">
+                                    <p className="text-xs font-medium opacity-80">Total</p>
+                                    <p className="font-bold">R$ {paymentDetails.finalTotal.toFixed(2)}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2 font-bold text-sm">
+                                Ver Carrinho <ArrowRight size={18} />
+                            </div>
+                        </button>
+                    </div>
+                )}
             </div>
 
-            {/* RIGHT: CART & CHECKOUT */}
-            <div className="flex flex-col bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden h-full">
+            {/* RIGHT: CART & CHECKOUT (Escondido no mobile se view == 'PRODUCTS') */}
+            <div className={`flex flex-col bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden h-full ${mobileView === 'PRODUCTS' ? 'hidden lg:flex' : 'flex'}`}>
                 
                 {/* Mode Toggles */}
                 <div className="p-4 border-b border-zinc-800">
@@ -532,6 +559,14 @@ export const NewSale = () => {
 
                 {/* Cart Items List */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+                    {/* Botão Voltar para Produtos (Só Mobile) */}
+                    <button 
+                        onClick={() => setMobileView('PRODUCTS')}
+                        className="w-full py-3 border border-dashed border-zinc-700 rounded-xl text-zinc-400 text-sm hover:text-white hover:border-zinc-500 lg:hidden mb-4 flex items-center justify-center gap-2"
+                    >
+                        <Plus size={16} /> Adicionar mais itens
+                    </button>
+
                     {cart.length === 0 ? (
                         <div className="h-full flex flex-col items-center justify-center text-zinc-600 space-y-4 opacity-50">
                             <ShoppingBag size={48} className="stroke-1" />
