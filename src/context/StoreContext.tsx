@@ -253,7 +253,40 @@ export const StoreProvider = ({ children }: { children?: React.ReactNode }) => {
   
   const addProduct = async (p: Product) => { const {id, ...rest} = p; await supabase.from('products').insert([rest]); fetchData(); };
   const updateProduct = async (p: Product) => { await supabase.from('products').update(p).eq('id', p.id); fetchData(); };
-  const deleteProduct = async (id: string) => { if (!canDelete()) return alert("Sem permissão."); await supabase.from('products').delete().eq('id', id); fetchData(); };
+  const deleteProduct = async (id: string) => { 
+    if (!canDelete()) return alert("Sem permissão.");
+    
+    // 1. Primeiro buscamos o produto para saber se ele tem imagem
+    const { data: product } = await supabase.from('products').select('image_url').eq('id', id).single();
+
+    // 2. Se tiver imagem, apagamos ela do Storage
+    if (product?.image_url) {
+        try {
+            // A URL do Supabase geralmente é: .../storage/v1/object/public/products/nome-do-arquivo.jpg
+            // Precisamos extrair apenas o "nome-do-arquivo.jpg" para apagar
+            const urlParts = product.image_url.split('/products/');
+            
+            if (urlParts.length > 1) {
+                const fileName = urlParts[1]; // Pega a parte final da URL
+                // Remove do bucket 'products'
+                await supabase.storage.from('products').remove([fileName]);
+            }
+        } catch (err) {
+            console.error("Erro ao tentar apagar imagem antiga:", err);
+            // Não impedimos a exclusão do produto se a imagem falhar, mas avisamos no console
+        }
+    }
+
+    // 3. Agora sim, apagamos o registro do banco de dados
+    const { error } = await supabase.from('products').delete().eq('id', id);
+    
+    if (error) {
+        alert("Erro ao excluir produto do banco de dados.");
+        console.error(error);
+    } else {
+        fetchData(); 
+    }
+};
   
   // VENDA COM BLOQUEIO DE CAIXA
   const addSale = async (sale: Sale, items: any[]) => {
